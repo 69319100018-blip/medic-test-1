@@ -9,18 +9,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700;800&family=Inter:wght@400;600;700;800&family=Orbitron:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <style>
+      /* หน้าสมัคร: แสดงฟอร์มทันที ไม่ต้องเลื่อนเมาส์ */
+      .register-body .login-page { --focus: 1 !important; }
+      .register-body .login-card {
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        pointer-events: auto !important;
+      }
+      .register-body .reveal-hint { display: none !important; }
+      .register-body .login-brand,
+      .register-body .page-footer,
+      .register-body .bg-controls { opacity: 1 !important; }
+      .register-body .login-card { max-height: min(90vh, 720px); overflow-y: auto; }
+    </style>
 </head>
-<body class="login-body">
+<body class="login-body register-body">
     <!-- วิดีโอพื้นหลัง -->
     <video id="bgVideo" class="login-bg-video" autoplay muted playsinline preload="auto" src="assets/videos/bg1-h264.mp4"></video>
     <div class="login-overlay"></div>
     <div class="login-grid"></div>
     <div class="scanline"></div>
 
-    <div class="reveal-hint" id="revealHint" aria-hidden="true">
-        <i class="bi bi-mouse"></i>
-        เลื่อนเมาส์เข้าใกล้<br>ช่องเข้าสู่ระบบ
-    </div>
 
     <div class="login-page" id="loginPage">
         <div class="login-inner">
@@ -33,9 +44,9 @@
                     <span class="status-pill"><span class="dot"></span> System Online</span>
                 </div>
                 <h1>Medic <span>Shift Log</span></h1>
-                <p class="tagline">ระบบบันทึกเวร · ทีมแพทย์</p>
+                <p class="tagline">สมัครสมาชิกใหม่ · ทีมแพทย์</p>
                 <p class="desc">
-                    ล็อกอินเพื่อเข้าเวร–ออกเวร และตรวจสอบสถานะในทีมอย่างชัดเจน
+                    กรอกข้อมูลเพื่อสร้างบัญชี จากนั้นรอแอดมินปรับตำแหน่ง/role ให้เหมาะสม
                 </p>
                 <div class="feature-chips">
                     <span><i class="bi bi-clock-history"></i> เข้า–ออกเวร</span>
