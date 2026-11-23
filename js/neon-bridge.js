@@ -435,6 +435,7 @@
               if (typeof enhanceVehicleAdminFilter === 'function') enhanceVehicleAdminFilter();
               if (typeof setupSecurityAdmin === 'function') setupSecurityAdmin();
               if (typeof setupMembersAdmin === 'function') setupMembersAdmin();
+              if (typeof setupIntelUnlock === 'function') setupIntelUnlock();
             } catch (e) { console.warn(e); }
           });
         }
@@ -576,7 +577,148 @@
     refresh();
   };
 
+  // ============================================================
+  // เมนูลับ Intel — ถอดตำแหน่งจาก IP (เฉพาะแอดมิน)
+  // ปลดล็อก: คลิกโลโก้/ชื่อแบรนด์ด้านบน 5 ครั้งติดกันภายใน 4 วินาที
+  // ============================================================
+  window.__intelUnlocked = false;
 
+  window.setupIntelUnlock = function () {
+    if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
+    if (window.__intelUnlockBound) return;
+    window.__intelUnlockBound = true;
+
+    let clicks = 0;
+    let timer = null;
+    const targets = [
+      document.querySelector('.brand'),
+      document.querySelector('.sidebar-brand'),
+      document.querySelector('.logo'),
+      document.querySelector('.sidebar .brand-title'),
+      document.querySelector('.sidebar h1'),
+      document.querySelector('.sidebar .nav-brand'),
+      document.getElementById('navSecurity')
+    ].filter(Boolean);
+
+    const onSecretClick = (e) => {
+      // กด Shift ค้างแล้วคลิก "ความปลอดภัย" ก็ปลดล็อกได้
+      if (e.currentTarget?.id === 'navSecurity' && !e.shiftKey) return;
+      clicks += 1;
+      clearTimeout(timer);
+      timer = setTimeout(() => { clicks = 0; }, 4000);
+      if (clicks < 5 && !(e.currentTarget?.id === 'navSecurity' && e.shiftKey)) return;
+      clicks = 0;
+      window.__intelUnlocked = true;
+      document.getElementById('navIntel')?.classList.remove('hidden');
+      if (typeof showAlert === 'function') {
+        showAlert('ปลดล็อกเมนูลับ', 'Intel — ตำแหน่งจาก IP พร้อมใช้งานแล้ว', 'success');
+      }
+    };
+
+    if (targets.length) {
+      targets.forEach((el) => el.addEventListener('click', onSecretClick));
+    } else {
+      // fallback: กด Ctrl+Shift+I (ไม่ใช่ DevTools shortcut บนบางเบราว์เซอร์ — ใช้ Alt+Shift+I)
+      document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+          e.preventDefault();
+          window.__intelUnlocked = true;
+          document.getElementById('navIntel')?.classList.remove('hidden');
+          if (typeof showAlert === 'function') {
+            showAlert('ปลดล็อกเมนูลับ', 'Intel — ตำแหน่งจาก IP พร้อมใช้งานแล้ว', 'success');
+          }
+        }
+      });
+    }
+  };
+
+  window.setupIntelAdmin = async function () {
+    if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
+    if (!window.__intelUnlocked) return;
+    const list = document.getElementById('intelList');
+    const summary = document.getElementById('intelSummary');
+    const btn = document.getElementById('btnRefreshIntel');
+    if (!list) return;
+
+    async function refresh() {
+      list.innerHTML = '<div class="log-item"><strong>กำลังถอดตำแหน่งจาก IP...</strong><span>อาจใช้เวลาสักครู่</span></div>';
+      if (summary) summary.textContent = 'กำลังโหลด...';
+      try {
+        if (typeof apiLoadSecurityIntel !== 'function') {
+          list.innerHTML = '<div class="log-item"><strong>API ยังไม่พร้อม</strong></div>';
+          return;
+        }
+        const data = await apiLoadSecurityIntel();
+        const items = data?.items || [];
+        if (summary) {
+          const t = data?.generatedAt ? new Date(data.generatedAt).toLocaleString('th-TH') : '-';
+          summary.textContent = `${items.length} เซสชัน · IP เฉพาะ ${data?.uniqueIpCount ?? '-'} · อัปเดต ${t}`;
+        }
+        if (!items.length) {
+          list.innerHTML = '<div class="log-item"><strong>ยังไม่มีเซสชัน</strong><span>เมื่อมีคนล็อกอิน ระบบจะเก็บ IP แล้วถอดตำแหน่งได้ที่นี่</span></div>';
+          return;
+        }
+        list.innerHTML = items.map((s) => {
+          const g = s.geo || {};
+          const loc = g.label || '—';
+          const isp = [g.isp, g.org].filter(Boolean).join(' · ') || '—';
+          const mapLink = (typeof g.lat === 'number' && typeof g.lon === 'number')
+            ? `<a href="https://www.openstreetmap.org/?mlat=${g.lat}&mlon=${g.lon}#map=12/${g.lat}/${g.lon}" target="_blank" rel="noopener" class="btn btn-secondary btn-small">แผนที่</a>`
+            : '';
+          const when = s.createdAt ? new Date(s.createdAt).toLocaleString('th-TH') : '-';
+          const ua = (s.userAgent || '').slice(0, 90);
+          const safeUser = String(s.username || '').replace(/"/g, '&quot;');
+          const safeIp = String(s.ipAddress || '').replace(/"/g, '&quot;');
+          const safeFp = String(s.fingerprint || '').replace(/"/g, '&quot;');
+          return `
+            <div class="stock-item" style="padding:14px;">
+              <div class="stock-item-head">
+                <div>
+                  <strong>${(s.username || '-').replace(/</g, '&lt;')}</strong>
+                  <span class="stock-meta">IP ${s.ipAddress || '-'} · ${when}</span>
+                  <span class="stock-meta" style="display:block;margin-top:4px;">
+                    📍 ${String(loc).replace(/</g, '&lt;')}
+                    ${g.private ? ' <span class="badge out">private</span>' : ''}
+                  </span>
+                  <span class="stock-meta" style="display:block;">ISP: ${String(isp).replace(/</g, '&lt;')}</span>
+                  ${ua ? `<span class="stock-meta" style="display:block;opacity:0.7;">${ua.replace(/</g, '&lt;')}</span>` : ''}
+                </div>
+              </div>
+              <div class="stock-item-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                ${mapLink}
+                <button class="btn btn-danger btn-small intel-ban" type="button"
+                  data-fp="${safeFp}" data-ip="${safeIp}" data-user="${safeUser}">บล็อก</button>
+              </div>
+            </div>`;
+        }).join('');
+
+        list.querySelectorAll('.intel-ban').forEach((el) => {
+          el.addEventListener('click', async () => {
+            try {
+              await apiCreateBan({
+                fingerprint: el.dataset.fp || null,
+                ipAddress: el.dataset.ip || null,
+                username: el.dataset.user || null,
+                reason: 'บล็อกจากเมนู Intel'
+              });
+              if (typeof showAlert === 'function') showAlert('บล็อกแล้ว', el.dataset.ip || el.dataset.user || '', 'success');
+            } catch (e) {
+              if (typeof showAlert === 'function') showAlert('บล็อกไม่สำเร็จ', e.message, 'error');
+            }
+          });
+        });
+      } catch (e) {
+        list.innerHTML = `<div class="log-item"><strong>โหลดไม่สำเร็จ</strong><span>${(e.message || '').replace(/</g, '&lt;')}</span></div>`;
+        if (summary) summary.textContent = 'error';
+      }
+    }
+
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => refresh());
+    }
+    refresh();
+  };
 
   window.setupMembersAdmin = async function () {
     if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;

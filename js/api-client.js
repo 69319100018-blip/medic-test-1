@@ -188,6 +188,11 @@ async function apiLoadDeviceSessions() {
   return api('/security-sessions');
 }
 
+/** เมนูลับ: เซสชัน + ถอดตำแหน่งจาก IP */
+async function apiLoadSecurityIntel() {
+  return api('/security-intel');
+}
+
 async function apiCreateBan(payload) {
   return api('/security-ban', { method: 'POST', body: payload });
 }

@@ -6,8 +6,8 @@ const users = {
 
 const userProfiles = {
     "talos blackagency": { name: "Talos Blackagency", role: "ผู้อำนวยการแพทย์", avatar: "assets/images/talos.jpg", isAdmin: true, canViewMonitoring: true, desc: "ควบคุมและตรวจสอบทีมเวร" },
-    "noelle blackagency": { name: "Noelle Blackagency", role: "รอง.ผู้อำนวยการ", avatar: "assets/images/noeele.jpg", isAdmin: false, canViewMonitoring: false, desc: "สนับสนุนงานประสานงาน" },
-    "jane doe": { name: "Jane Doe", role: "พยาบาล", avatar: "assets/images/jane.jpg", isAdmin: false, canViewMonitoring: false, desc: "ดูแลผู้ป่วย" }
+    "noelle blackagency": { name: "Noelle Blackagency", role: "รองผู้อำนวยการแพทย์", avatar: "assets/images/noeele.jpg", isAdmin: false, canViewMonitoring: false, desc: "สนับสนุนงานประสานงาน" },
+    "jane doe": { name: "Jane Doe", role: "นักเรียนแพทย์", avatar: "assets/images/jane.jpg", isAdmin: false, canViewMonitoring: false, desc: "ดูแลผู้ป่วย" }
 };
 
 const manualUrl = "https://docs.google.com/spreadsheets/d/1vGjzD5YZiiBs65yBodjtxsoUPQVr_EMMnfqRXWbOZrI/edit?gid=749978115#gid=749978115";
@@ -1395,6 +1395,14 @@ function handleMenuSwitch(event) {
         showAlert('ไม่มีสิทธิ์เข้าถึง', 'เฉพาะผู้ใช้ที่มีสิทธิ์เท่านั้น', 'warning');
         return;
     }
+    if ((target === 'securitySection' || target === 'membersSection' || target === 'intelSection') && !isAdmin(currentUser)) {
+        showAlert('ไม่มีสิทธิ์เข้าถึง', 'เฉพาะแอดมินเท่านั้น', 'warning');
+        return;
+    }
+    if (target === 'intelSection' && !window.__intelUnlocked) {
+        showAlert('เมนูลับ', 'ยังไม่ได้ปลดล็อกเมนู Intel', 'warning');
+        return;
+    }
     document.querySelectorAll('.nav-link').forEach((btn) => btn.classList.toggle('active', btn.dataset.target === target));
     document.querySelectorAll('main section').forEach((section) => {
         if (section.id === target) {
@@ -1406,6 +1414,9 @@ function handleMenuSwitch(event) {
     });
     if (target === 'stockHistorySection') {
         loadStockWithdrawals().then(renderStockWithdrawals);
+    }
+    if (target === 'intelSection' && typeof setupIntelAdmin === 'function') {
+        setupIntelAdmin();
     }
 }
 

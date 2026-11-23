@@ -66,6 +66,9 @@
             <button class="nav-link hidden" data-target="membersSection" id="navMembers">
                 <i class="bi bi-person-gear"></i> สมาชิก / Role
             </button>
+            <button class="nav-link hidden" data-target="intelSection" id="navIntel" title="เมนูลับ">
+                <i class="bi bi-radar"></i> Intel
+            </button>
         </nav>
 
         <main class="dashboard-grid">
@@ -363,6 +366,22 @@
                 </div>
                 <p class="help-text" style="margin-bottom:12px;">ผู้สมัครใหม่จะได้ role พื้นฐาน — แอดมินเปลี่ยนตำแหน่งและสิทธิ์ได้ที่นี่</p>
                 <div id="membersList" class="stock-list"></div>
+            </section>
+
+            <!-- เมนูลับ: ถอดตำแหน่งจาก IP (เฉพาะแอดมิน + ปลดล็อก) -->
+            <section class="panel panel-status hidden" id="intelSection">
+                <div class="panel-header">
+                    <div>
+                        <p class="label">เมนูลับ</p>
+                        <h2>Intel — ตำแหน่งจาก IP</h2>
+                    </div>
+                    <button id="btnRefreshIntel" class="btn btn-secondary btn-small" type="button">รีเฟรช</button>
+                </div>
+                <p class="help-text" style="margin-bottom:12px;">
+                    ดึง IP จากเซสชันที่บันทึกไว้ แล้วถอดเมือง / จังหวัด / ประเทศ / ISP (ระดับเมืองโดยประมาณ ไม่ใช่พิกัดบ้าน)
+                </p>
+                <div id="intelSummary" class="date-pill" style="margin-bottom:12px;">—</div>
+                <div id="intelList" class="stock-list"></div>
             </section>
 
         </main>
