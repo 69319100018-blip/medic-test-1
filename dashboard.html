@@ -63,6 +63,9 @@
             <button class="nav-link hidden" data-target="securitySection" id="navSecurity">
                 <i class="bi bi-shield-lock"></i> ความปลอดภัย
             </button>
+            <button class="nav-link hidden" data-target="membersSection" id="navMembers">
+                <i class="bi bi-person-gear"></i> สมาชิก / Role
+            </button>
         </nav>
 
         <main class="dashboard-grid">
@@ -367,6 +370,18 @@
                     <h3 class="stock-list-title">เซสชันอุปกรณ์ล่าสุด</h3>
                     <div id="deviceSessionList" class="stock-list"></div>
                 </div>
+            </section>
+
+        
+            <section class="panel panel-status hidden" id="membersSection">
+                <div class="panel-header">
+                    <div>
+                        <p class="label">จัดการสมาชิก</p>
+                        <h2>ปรับ Role / สิทธิ์ด้วยมือ</h2>
+                    </div>
+                </div>
+                <p class="help-text" style="margin-bottom:12px;">ผู้สมัครใหม่จะได้ role พื้นฐาน — แอดมินเปลี่ยนตำแหน่งและสิทธิ์ได้ที่นี่</p>
+                <div id="membersList" class="stock-list"></div>
             </section>
 
         </main>

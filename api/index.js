@@ -219,6 +219,87 @@ function needDb(res) {
 }
 
 // ---------- Auth ----------
+
+// ---------- Register / User role (admin) ----------
+app.post('/api/register', loginLimiter, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    const { username, displayName, password } = req.body || {};
+    const uname = String(username || '').trim().toLowerCase();
+    const name = String(displayName || '').trim();
+    const pass = String(password || '');
+    if (!uname || !name || !pass) {
+      return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ' });
+    }
+    if (uname.length < 3) return res.status(400).json({ error: 'ชื่อผู้ใช้สั้นเกินไป' });
+    if (pass.length < 4) return res.status(400).json({ error: 'รหัสผ่านอย่างน้อย 4 ตัว' });
+    if (!/^[a-z0-9._\- ]+$/i.test(uname)) {
+      return res.status(400).json({ error: 'ชื่อผู้ใช้ใช้ได้เฉพาะตัวอักษร ตัวเลข . _ - และเว้นวรรค' });
+    }
+
+    const exists = await sql`SELECT username FROM users WHERE username = ${uname} LIMIT 1`;
+    if (exists.length) return res.status(409).json({ error: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว' });
+
+    const hash = await bcrypt.hash(pass, 10);
+    await sql`
+      INSERT INTO users (username, password_hash, display_name, role, avatar, is_admin, can_view_monitoring, description)
+      VALUES (
+        ${uname},
+        ${hash},
+        ${name},
+        ${'แพทย์ (รอปรับ role)'},
+        ${'assets/images/123.jpg'},
+        ${false},
+        ${false},
+        ${'สมัครผ่านหน้าเว็บ — รอแอดมินปรับสิทธิ์'}
+      )
+    `;
+    res.json({ ok: true, username: uname, message: 'สมัครสำเร็จ' });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.post('/api/user-role', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมินเท่านั้น' });
+    const { username, role, isAdmin, canViewMonitoring, description } = req.body || {};
+    const uname = String(username || '').trim().toLowerCase();
+    if (!uname) return res.status(400).json({ error: 'ไม่มี username' });
+    if (uname === req.user.sub && isAdmin === false) {
+      return res.status(400).json({ error: 'ไม่สามารถถอดสิทธิ์แอดมินของตัวเองได้' });
+    }
+
+    const rows = await sql`SELECT username FROM users WHERE username = ${uname}`;
+    if (!rows.length) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
+
+    if (role !== undefined) {
+      await sql`UPDATE users SET role = ${String(role)} WHERE username = ${uname}`;
+    }
+    if (isAdmin !== undefined) {
+      await sql`UPDATE users SET is_admin = ${!!isAdmin} WHERE username = ${uname}`;
+    }
+    if (canViewMonitoring !== undefined) {
+      await sql`UPDATE users SET can_view_monitoring = ${!!canViewMonitoring} WHERE username = ${uname}`;
+    }
+    if (description !== undefined) {
+      await sql`UPDATE users SET description = ${String(description)} WHERE username = ${uname}`;
+    }
+
+    const updated = await sql`
+      SELECT username, display_name AS name, role, avatar,
+             is_admin AS "isAdmin", can_view_monitoring AS "canViewMonitoring",
+             description AS desc
+      FROM users WHERE username = ${uname}
+    `;
+    res.json({ ok: true, user: updated[0] });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+
 app.post('/api/login', loginLimiter, async (req, res) => {
   try {
     if (!needDb(res)) return;

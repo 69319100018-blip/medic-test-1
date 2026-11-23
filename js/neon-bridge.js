@@ -424,12 +424,14 @@
                 document.getElementById('stockAddFormWrap')?.classList.remove('hidden');
                 document.getElementById('doctorsAddFormWrap')?.classList.remove('hidden');
                 document.getElementById('navSecurity')?.classList.remove('hidden');
+                document.getElementById('navMembers')?.classList.remove('hidden');
                 document.getElementById('vehicleAdminWrap')?.classList.remove('hidden');
               } else if (typeof canViewMonitoring === 'function' && canViewMonitoring(currentUser)) {
                 document.getElementById('vehicleAdminWrap')?.classList.remove('hidden');
               }
               if (typeof enhanceVehicleAdminFilter === 'function') enhanceVehicleAdminFilter();
               if (typeof setupSecurityAdmin === 'function') setupSecurityAdmin();
+              if (typeof setupMembersAdmin === 'function') setupMembersAdmin();
             } catch (e) { console.warn(e); }
           });
         }
@@ -568,6 +570,109 @@
         }
       };
     }
+    refresh();
+  };
+
+
+
+  window.setupMembersAdmin = async function () {
+    if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
+    const list = document.getElementById('membersList');
+    if (!list) return;
+
+    const ROLE_PRESETS = [
+      'ผู้อำนวยการแพทย์',
+      'รอง.ผู้อำนวยการ',
+      'แพทย์',
+      'พยาบาล',
+      'เจ้าหน้าที่',
+      'แพทย์ (รอปรับ role)'
+    ];
+
+    async function refresh() {
+      try {
+        const usersMap = await apiLoadUsers();
+        const entries = Object.entries(usersMap || {});
+        if (!entries.length) {
+          list.innerHTML = '<div class="log-item"><strong>ยังไม่มีสมาชิก</strong></div>';
+          return;
+        }
+        list.innerHTML = entries.map(([username, u]) => {
+          const roleOptions = ROLE_PRESETS.map((r) =>
+            `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`
+          ).join('') + (ROLE_PRESETS.includes(u.role) ? '' : `<option value="${escapeHtml(u.role || '')}" selected>${escapeHtml(u.role || '')}</option>`);
+          return `
+            <div class="stock-item" data-user="${escapeHtml(username)}">
+              <div class="stock-item-head">
+                <div>
+                  <strong>${escapeHtml(u.name || username)}</strong>
+                  <span class="stock-meta">${escapeHtml(username)} • ปัจจุบัน: ${escapeHtml(u.role || '-')}</span>
+                </div>
+              </div>
+              <div class="stock-item-body" style="display:grid;gap:8px;">
+                <label>Role / ตำแหน่ง
+                  <select class="form-control member-role">
+                    ${roleOptions}
+                    <option value="__custom__">กำหนดเอง...</option>
+                  </select>
+                </label>
+                <label class="member-custom-role hidden">Role กำหนดเอง
+                  <input type="text" class="form-control member-role-custom" placeholder="พิมพ์ตำแหน่ง">
+                </label>
+                <label style="display:flex;gap:8px;align-items:center;">
+                  <input type="checkbox" class="member-admin" ${u.isAdmin ? 'checked' : ''}> สิทธิ์แอดมิน
+                </label>
+                <label style="display:flex;gap:8px;align-items:center;">
+                  <input type="checkbox" class="member-monitor" ${u.canViewMonitoring ? 'checked' : ''}> ดูภาพรวมทีม / ตรวจสอบ
+                </label>
+              </div>
+              <div class="stock-item-actions">
+                <button class="btn btn-success btn-small member-save" type="button">บันทึก</button>
+              </div>
+            </div>`;
+        }).join('');
+
+        list.querySelectorAll('.stock-item').forEach((card) => {
+          const roleSel = card.querySelector('.member-role');
+          const customWrap = card.querySelector('.member-custom-role');
+          roleSel?.addEventListener('change', () => {
+            customWrap?.classList.toggle('hidden', roleSel.value !== '__custom__');
+          });
+          card.querySelector('.member-save')?.addEventListener('click', async () => {
+            const username = card.dataset.user;
+            let role = roleSel?.value;
+            if (role === '__custom__') {
+              role = card.querySelector('.member-role-custom')?.value.trim();
+              if (!role) {
+                if (typeof showAlert === 'function') showAlert('กรอก role', 'ระบุตำแหน่งที่ต้องการ', 'warning');
+                return;
+              }
+            }
+            const isAdminFlag = !!card.querySelector('.member-admin')?.checked;
+            const canViewMonitoring = !!card.querySelector('.member-monitor')?.checked;
+            try {
+              await apiUpdateUserRole({ username, role, isAdmin: isAdminFlag, canViewMonitoring });
+              if (typeof userProfiles !== 'undefined') {
+                userProfiles[username] = {
+                  ...(userProfiles[username] || {}),
+                  role,
+                  isAdmin: isAdminFlag,
+                  canViewMonitoring
+                };
+              }
+              if (typeof showAlert === 'function') showAlert('บันทึกแล้ว', `${username} → ${role}`, 'success');
+              refresh();
+            } catch (e) {
+              if (typeof showAlert === 'function') showAlert('บันทึกไม่สำเร็จ', e.message, 'error');
+            }
+          });
+        });
+      } catch (e) {
+        console.warn(e);
+        list.innerHTML = `<div class="log-item"><strong>โหลดสมาชิกไม่สำเร็จ</strong><span>${e.message || ''}</span></div>`;
+      }
+    }
+
     refresh();
   };
 

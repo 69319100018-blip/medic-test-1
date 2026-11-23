@@ -200,3 +200,12 @@ async function apiSecurityEvent(payload) {
   return api('/security-event', { method: 'POST', body: payload });
 }
 
+
+
+async function apiRegister({ username, displayName, password }) {
+  return api('/register', { method: 'POST', body: { username, displayName, password } });
+}
+
+async function apiUpdateUserRole(payload) {
+  return api('/user-role', { method: 'POST', body: payload });
+}
