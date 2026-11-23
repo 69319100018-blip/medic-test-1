@@ -74,14 +74,35 @@
         <main class="dashboard-grid">
             <section class="panel panel-profile" id="overviewSection">
                 <div class="profile-header">
-                    <div class="avatar-wrap">
+                    <div class="avatar-wrap" id="avatarWrap">
                         <img id="userAvatar" class="avatar" src="" alt="Avatar">
                         <span class="avatar-status" id="avatarStatusDot"></span>
+                        <button type="button" class="avatar-edit-btn" id="btnEditAvatar" title="เปลี่ยนรูปโปรไฟล์">
+                            <i class="bi bi-camera-fill"></i>
+                        </button>
                     </div>
                     <div>
                         <p class="label">ผู้ใช้งาน</p>
                         <h2 id="profileName"></h2>
                         <p class="subtext" id="profileRole"></p>
+                        <button type="button" class="btn btn-tertiary btn-small" id="btnChangeAvatar" style="margin-top:8px;">
+                            <i class="bi bi-image"></i> เปลี่ยนรูปโปรไฟล์
+                        </button>
+                    </div>
+                </div>
+                <div id="avatarPickerPanel" class="avatar-picker-panel hidden">
+                    <div class="avatar-picker-head">
+                        <strong>เลือกรูปโปรไฟล์</strong>
+                        <button type="button" class="music-help-close" id="btnCloseAvatarPicker" aria-label="ปิด">&times;</button>
+                    </div>
+                    <p class="help-text" style="margin-bottom:10px;">เลือกจากรูปที่มี หรืออัปโหลดจากเครื่อง (ย่ออัตโนมัติ)</p>
+                    <div id="avatarPresetGrid" class="avatar-preset-grid"></div>
+                    <div class="fund-actions" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
+                        <label class="btn btn-secondary btn-small" style="cursor:pointer;margin:0;">
+                            <i class="bi bi-upload"></i> อัปโหลดจากเครื่อง
+                            <input type="file" id="avatarFileInput" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" hidden>
+                        </label>
+                        <button type="button" class="btn btn-tertiary btn-small" id="btnResetAvatar">คืนรูปเริ่มต้น</button>
                     </div>
                 </div>
                 <div class="profile-stat">
