@@ -1,5 +1,6 @@
 /**
  * Medic Shift Log — API Client (Secure + JWT)
+ * ใช้ path ชั้นเดียวทั้งหมด (/api/xxx) เพื่อให้ Vercel route ได้
  */
 const API_BASE = (window.location.origin.includes('localhost') || window.location.protocol === 'file:')
   ? 'http://localhost:3000'
@@ -38,7 +39,7 @@ async function api(path, options = {}) {
   const res = await fetch(url, {
     ...options,
     headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
@@ -50,7 +51,7 @@ async function api(path, options = {}) {
   }
   if (!res.ok) {
     if (res.status === 404) {
-      throw new Error('ไม่พบ API (404) — ตรวจว่า deploy ฝั่ง serverless และตั้ง DATABASE_URL / JWT_SECRET บน Vercel แล้ว');
+      throw new Error('ไม่พบ API (404) — ต้อง deploy โค้ดล่าสุดขึ้น Vercel');
     }
     if (res.status === 503) {
       throw new Error(data.error || 'เซิร์ฟเวอร์ยังไม่พร้อม (ตรวจ Environment Variables)');
@@ -62,7 +63,10 @@ async function api(path, options = {}) {
 
 async function apiLogin(username, password) {
   const data = await api('/login', { method: 'POST', body: { username, password } });
-  if (data.token) setSession(data.username, data.profile, data.token);
+  if (data.token) {
+    setSession(data.username, data.profile, data.token);
+    sessionStorage.setItem('loggedInUser', data.username);
+  }
   return data;
 }
 
@@ -76,11 +80,11 @@ async function apiLoadShifts(username) {
 }
 
 async function apiCheckIn() {
-  return api('/shifts/checkin', { method: 'POST', body: {} });
+  return api('/shift-checkin', { method: 'POST', body: {} });
 }
 
 async function apiCheckOut(username, isForced = false) {
-  return api('/shifts/checkout', {
+  return api('/shift-checkout', {
     method: 'POST',
     body: { isForced, username: isForced ? username : undefined }
   });
@@ -91,7 +95,7 @@ async function apiLoadFund() {
 }
 
 async function apiFundTransaction(payload) {
-  return api('/fund/transaction', { method: 'POST', body: payload });
+  return api('/fund-tx', { method: 'POST', body: payload });
 }
 
 async function apiLoadStock() {
@@ -103,19 +107,19 @@ async function apiAddStock(item) {
 }
 
 async function apiAdjustStock(id, delta, meta = {}) {
-  return api(`/stock/${id}`, { method: 'PATCH', body: { delta, ...meta } });
+  return api('/stock-item', { method: 'PATCH', body: { id, delta, ...meta } });
 }
 
 async function apiUpdateStock(id, fields) {
-  return api(`/stock/${id}`, { method: 'PATCH', body: fields });
+  return api('/stock-item', { method: 'PATCH', body: { id, ...fields } });
 }
 
 async function apiDeleteStock(id) {
-  return api(`/stock/${id}`, { method: 'DELETE' });
+  return api('/stock-item', { method: 'DELETE', body: { id } });
 }
 
 async function apiLoadStockWithdrawals() {
-  return api('/stock/withdrawals');
+  return api('/stock-withdrawals');
 }
 
 async function apiLoadVehicles() {
@@ -127,7 +131,7 @@ async function apiAddVehicle(v) {
 }
 
 async function apiDeleteVehicle(id) {
-  return api(`/vehicles/${id}`, { method: 'DELETE' });
+  return api('/vehicle-item', { method: 'DELETE', body: { id } });
 }
 
 async function apiLoadDoctors() {
@@ -139,5 +143,5 @@ async function apiAddDoctor(d) {
 }
 
 async function apiDeleteDoctor(id) {
-  return api(`/doctors/${id}`, { method: 'DELETE' });
+  return api('/doctor-item', { method: 'DELETE', body: { id } });
 }
