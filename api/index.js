@@ -1,7 +1,10 @@
 /**
  * Vercel Serverless entry — ใช้ logic เดียวกับ server.js
  * ตั้ง Environment Variables บน Vercel:
- *   DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS, DISCORD_WEBHOOK_URL, DISCORD_GUILD_ID
+ *   DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS,
+ *   DISCORD_WEBHOOK_URL (เข้า-ออกเวร),
+ *   DISCORD_WEBHOOK_FUND_STOCK (เงิน/สต็อก),
+ *   DISCORD_WEBHOOK_VEHICLE (ทะเบียนรถ)
  */
 require('dotenv').config();
 const express = require('express');
@@ -16,6 +19,8 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const JWT_EXPIRES = '12h';
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
+const DISCORD_WEBHOOK_FUND_STOCK = process.env.DISCORD_WEBHOOK_FUND_STOCK || process.env.DISCORD_WEBHOOK_URL || '';
+const DISCORD_WEBHOOK_VEHICLE = process.env.DISCORD_WEBHOOK_VEHICLE || process.env.DISCORD_WEBHOOK_URL || '';
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || '';
 
 if (!process.env.DATABASE_URL) {
@@ -160,32 +165,10 @@ function formatShiftDuration(startIso, endDate = new Date()) {
   return parts.join(' ');
 }
 
-async function notifyDiscordShift({ type, username, displayName, role, date, time, duration, isForced }) {
-  if (!DISCORD_WEBHOOK_URL) return;
-  const isIn = type === 'เข้าเวร';
-  const color = isIn ? 0x22c55e : (isForced ? 0xf59e0b : 0xef4444);
-  const title = isIn ? '✅ เข้าเวร' : (isForced ? '⚠️ ถูกบังคับออกเวร' : '🚪 ออกเวร');
-  const fields = [
-    { name: 'ผู้ใช้', value: displayName || username || '-', inline: true },
-    { name: 'ตำแหน่ง', value: role || '-', inline: true },
-    { name: 'วันที่', value: date || '-', inline: true },
-    { name: 'เวลา', value: time || '-', inline: true }
-  ];
-  if (!isIn && duration) fields.push({ name: 'ระยะเวลา', value: duration, inline: true });
-
-  const body = {
-    username: 'Medic Shift Bot',
-    embeds: [{
-      title,
-      color,
-      fields,
-      footer: { text: 'Medic Shift Log' },
-      timestamp: new Date().toISOString()
-    }]
-  };
-
+async function postDiscordWebhook(webhookUrl, body) {
+  if (!webhookUrl) return;
   try {
-    const res = await fetch(DISCORD_WEBHOOK_URL, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -197,6 +180,43 @@ async function notifyDiscordShift({ type, username, displayName, role, date, tim
   } catch (e) {
     console.error('Discord webhook error', e);
   }
+}
+
+function discordEmbed({ title, color, fields }) {
+  return {
+    username: 'Medic Shift Bot',
+    embeds: [{
+      title,
+      color,
+      fields: (fields || []).filter(Boolean),
+      footer: { text: 'Medic Shift Log' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+}
+
+async function notifyDiscordShift({ type, username, displayName, role, date, time, duration, isForced }) {
+  const isIn = type === 'เข้าเวร';
+  const color = isIn ? 0x22c55e : (isForced ? 0xf59e0b : 0xef4444);
+  const title = isIn ? '✅ เข้าเวร' : (isForced ? '⚠️ ถูกบังคับออกเวร' : '🚪 ออกเวร');
+  const fields = [
+    { name: 'ผู้ใช้', value: displayName || username || '-', inline: true },
+    { name: 'ตำแหน่ง', value: role || '-', inline: true },
+    { name: 'วันที่', value: date || '-', inline: true },
+    { name: 'เวลา', value: time || '-', inline: true }
+  ];
+  if (!isIn && duration) fields.push({ name: 'ระยะเวลา', value: duration, inline: true });
+  await postDiscordWebhook(DISCORD_WEBHOOK_URL, discordEmbed({ title, color, fields }));
+}
+
+/** ช่องเบิกของ / เงินกองกลาง + สต็อก */
+async function notifyDiscordFundStock({ title, color, fields }) {
+  await postDiscordWebhook(DISCORD_WEBHOOK_FUND_STOCK, discordEmbed({ title, color, fields }));
+}
+
+/** ช่องทะเบียนรถ */
+async function notifyDiscordVehicle({ title, color, fields }) {
+  await postDiscordWebhook(DISCORD_WEBHOOK_VEHICLE, discordEmbed({ title, color, fields }));
 }
 
 async function lookupUserProfile(username) {
@@ -593,6 +613,20 @@ app.post('/api/fund-tx', authRequired, async (req, res) => {
       INSERT INTO fund_history (username, type, amount, note, date_th, time_th)
       VALUES (${username}, ${histType}, ${amt}, ${note}, ${t.date}, ${t.time})
     `;
+    const fundProfile = await lookupUserProfile(username);
+    const fundColor = (type === 'withdraw') ? 0xef4444 : 0x22c55e;
+    notifyDiscordFundStock({
+      title: type === 'withdraw' ? '💸 ถอนเงินกองกลาง' : (type === 'admin_add' ? '🏦 เพิ่มเงินกองกลาง (แอดมิน)' : '💰 ฝากเงินกองกลาง'),
+      color: fundColor,
+      fields: [
+        { name: 'ผู้ทำรายการ', value: fundProfile.name || username, inline: true },
+        { name: 'ประเภท', value: histType, inline: true },
+        { name: 'จำนวน', value: `${amt.toLocaleString('th-TH')} บาท`, inline: true },
+        { name: 'คงเหลือ', value: `${Number(balance).toLocaleString('th-TH')} บาท`, inline: true },
+        note ? { name: 'หมายเหตุ', value: String(note).slice(0, 200), inline: false } : null,
+        { name: 'เวลา', value: `${t.date} ${t.time}`, inline: true }
+      ]
+    }).catch(() => {});
     res.json({ ok: true, balance });
   } catch (err) {
     safeError(res, err);
@@ -629,6 +663,19 @@ app.post('/api/stock', authRequired, async (req, res) => {
                 added_by AS "addedBy", manual_status AS "manualStatus",
                 date_th AS date, time_th AS time
     `;
+    const stockProfile = await lookupUserProfile(req.user.sub);
+    notifyDiscordFundStock({
+      title: '📦 เพิ่มสต็อกอุปกรณ์',
+      color: 0x3b82f6,
+      fields: [
+        { name: 'ผู้เพิ่ม', value: stockProfile.name || req.user.sub, inline: true },
+        { name: 'รายการ', value: name, inline: true },
+        { name: 'จำนวน', value: `${Math.floor(quantity)} ชิ้น`, inline: true },
+        { name: 'ขั้นต่ำ', value: `${Math.floor(minQuantity)} ชิ้น`, inline: true },
+        { name: 'แหล่งที่มา', value: source || 'ไม่ระบุ', inline: true },
+        { name: 'เวลา', value: `${t.date} ${t.time}`, inline: true }
+      ]
+    }).catch(() => {});
     res.json(rows[0]);
   } catch (err) {
     safeError(res, err);
@@ -656,6 +703,20 @@ app.patch('/api/stock-item', authRequired, async (req, res) => {
         INSERT INTO stock_withdrawals (stock_id, stock_name, username, requester, quantity, is_add, price, note, date_th, time_th)
         VALUES (${id}, ${item.name}, ${req.user.sub}, ${requester || null}, ${Math.abs(amt)}, ${amt > 0}, ${price}, ${note}, ${t.date}, ${t.time})
       `;
+      const deltaProfile = await lookupUserProfile(req.user.sub);
+      notifyDiscordFundStock({
+        title: amt > 0 ? '📥 เติมสต็อกอุปกรณ์' : '📤 เบิกสต็อกอุปกรณ์',
+        color: amt > 0 ? 0x22c55e : 0xf59e0b,
+        fields: [
+          { name: 'ผู้ทำรายการ', value: deltaProfile.name || req.user.sub, inline: true },
+          { name: 'รายการ', value: item.name, inline: true },
+          { name: 'จำนวน', value: `${Math.abs(amt)} ชิ้น`, inline: true },
+          { name: 'คงเหลือ', value: `${newQty} ชิ้น`, inline: true },
+          requester ? { name: 'ผู้ขอ', value: String(requester), inline: true } : null,
+          note ? { name: 'หมายเหตุ', value: String(note).slice(0, 200), inline: false } : null,
+          { name: 'เวลา', value: `${t.date} ${t.time}`, inline: true }
+        ]
+      }).catch(() => {});
       return res.json({ ok: true, quantity: newQty });
     }
     if (quantity !== undefined) await sql`UPDATE stock_items SET quantity = ${Math.floor(quantity)}, updated_at = NOW() WHERE id = ${id}`;
@@ -721,6 +782,18 @@ app.post('/api/vehicles', authRequired, async (req, res) => {
       VALUES (${String(plate).toUpperCase()}, ${model}, ${req.user.sub}, ${note}, ${t.date}, ${t.time})
       RETURNING id, plate, model, username, note, date_th AS date, time_th AS time
     `;
+    const vehProfile = await lookupUserProfile(req.user.sub);
+    notifyDiscordVehicle({
+      title: '🚗 เพิ่มทะเบียนรถ',
+      color: 0x8b5cf6,
+      fields: [
+        { name: 'เจ้าของ', value: vehProfile.name || req.user.sub, inline: true },
+        { name: 'ทะเบียน', value: String(plate).toUpperCase(), inline: true },
+        { name: 'รุ่น', value: model || '-', inline: true },
+        note ? { name: 'หมายเหตุ', value: String(note).slice(0, 200), inline: false } : null,
+        { name: 'เวลา', value: `${t.date} ${t.time}`, inline: true }
+      ]
+    }).catch(() => {});
     res.json(rows[0]);
   } catch (err) {
     safeError(res, err);
