@@ -3672,3 +3672,355 @@ body.has-bg .card-form {
     font-size: 0.82rem;
     color: rgba(148, 163, 184, 0.75);
 }
+
+/* ============================================================
+   DASHBOARD CLEANUP — layout ที่อ่านง่าย ไม่ทะลุกรอบ
+   ============================================================ */
+
+.dashboard-body {
+  overflow-x: hidden;
+}
+
+.page-dashboard {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.page-dashboard *,
+.page-dashboard *::before,
+.page-dashboard *::after {
+  box-sizing: border-box;
+}
+
+/* Nav: เลื่อนแนวนอนได้ ถ้าเมนูเยอะ */
+.page-dashboard .dashboard-nav {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-dashboard .nav-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  max-width: none;
+}
+
+/* Grid หลัก */
+.page-dashboard .dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.page-dashboard .panel {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.page-dashboard .panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.page-dashboard .panel-header h2 {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.5vw, 1.35rem);
+  line-height: 1.3;
+}
+
+/* ฟอร์มในแผง */
+.page-dashboard label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.9);
+  width: 100%;
+}
+
+.page-dashboard input[type="text"],
+.page-dashboard input[type="number"],
+.page-dashboard input[type="password"],
+.page-dashboard select,
+.page-dashboard textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.65);
+  color: #e2e8f0;
+  font-size: 0.95rem;
+}
+
+.page-dashboard input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #3b82f6;
+}
+
+/* รายการการ์ดทั่วไป */
+.page-dashboard .stock-list,
+.page-dashboard #membersList,
+.page-dashboard #banList,
+.page-dashboard #deviceSessionList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.page-dashboard .stock-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+  min-width: 0;
+}
+
+.page-dashboard .stock-item-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.page-dashboard .stock-item-head strong {
+  font-size: 1rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.page-dashboard .stock-meta,
+.page-dashboard .stock-item span {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: rgba(148, 163, 184, 0.95);
+  word-break: break-word;
+}
+
+.page-dashboard .stock-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.page-dashboard .stock-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.page-dashboard .stock-item-actions .btn {
+  flex: 1 1 auto;
+  min-width: 96px;
+}
+
+/* —— สมาชิก / Role —— */
+#membersSection .help-text {
+  margin: 0 0 14px;
+  line-height: 1.5;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+#membersList {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.member-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.75));
+  min-width: 0;
+}
+
+.member-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.member-card-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #f8fafc;
+  line-height: 1.3;
+}
+
+.member-card-sub {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  word-break: break-all;
+}
+
+.member-card-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+}
+
+.member-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.member-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.member-field > span {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.member-field select,
+.member-field input[type="text"] {
+  width: 100%;
+}
+
+.member-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.member-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+.member-check span {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.member-card-foot {
+  display: flex;
+  justify-content: stretch;
+  margin-top: 2px;
+}
+
+.member-card-foot .btn {
+  width: 100%;
+}
+
+/* Fund / stock layouts กันล้น */
+.page-dashboard .fund-layout,
+.page-dashboard .stock-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+@media (min-width: 960px) {
+  .page-dashboard .fund-layout {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: start;
+  }
+}
+
+.page-dashboard .fund-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.page-dashboard .fund-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.page-dashboard .fund-actions .btn {
+  flex: 1 1 120px;
+}
+
+/* ประวัติ / รายการยาว */
+.page-dashboard .log-item,
+.page-dashboard .fund-history-item {
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* ปุ่มทั่วไป */
+.page-dashboard .btn {
+  white-space: nowrap;
+}
+
+.page-dashboard .btn-small {
+  white-space: normal;
+  line-height: 1.25;
+  padding: 8px 12px;
+}
+
+/* ซ่อน horizontal scroll แปลก ๆ จาก animation */
+.page-dashboard .dashboard-grid > section {
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .page-dashboard {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  #membersList,
+  .page-dashboard .stock-list {
+    grid-template-columns: 1fr !important;
+  }
+  .page-dashboard .nav-link {
+    font-size: 0.85rem;
+    padding: 8px 12px;
+  }
+}
