@@ -924,24 +924,51 @@ async function confirmRemoveVehicle(id) {
 
 // ============================================================
 // DOCTORS — แสดงรายชื่อจาก users ใน Neon เท่านั้น (อ่านอย่างเดียว)
+// จัดเรียงตามตำแหน่ง (ลำดับชั้น) แล้วตามสถานะเข้าเวร แล้วตามชื่อ
 // ============================================================
+function getRoleRank(role) {
+    const r = String(role || '').toLowerCase().replace(/\s+/g, '');
+    if (r.includes('ผู้อำนวยการ') && !r.includes('รอง')) return 1; // ผู้อำนวยการแพทย์
+    if (r.includes('รอง') && (r.includes('ผู้อำนวยการ') || r.includes('ผอ'))) return 2; // รอง.ผู้อำนวยการ
+    if (r.includes('หัวหน้า')) return 3;
+    if (r.includes('แพทย์') || r.includes('หมอ') || r.includes('doctor')) return 4;
+    if (r.includes('พยาบาล') || r.includes('nurse')) return 5;
+    if (r.includes('ผู้ช่วย') || r.includes('assistant')) return 6;
+    return 90; // อื่นๆ
+}
+
 function syncDoctorsFromUsers() {
     const profiles = (typeof userProfiles === 'object' && userProfiles) ? userProfiles : {};
-    doctors = Object.entries(profiles).map(([username, u], i) => ({
-        id: username || i,
-        name: u?.name || username,
-        role: u?.role || '-',
-        note: u?.desc || '',
-        username
-    })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
+    doctors = Object.entries(profiles).map(([username, u], i) => {
+        const onDuty = typeof getOpenCheckIn === 'function' ? Boolean(getOpenCheckIn(username)) : false;
+        return {
+            id: username || i,
+            name: u?.name || username,
+            role: u?.role || '-',
+            note: u?.desc || '',
+            username,
+            onDuty,
+            roleRank: getRoleRank(u?.role)
+        };
+    }).sort((a, b) => {
+        // 1) ตำแหน่ง (ลำดับชั้น)
+        if (a.roleRank !== b.roleRank) return a.roleRank - b.roleRank;
+        // 2) สถานะเข้าเวร (อยู่ในเวรก่อน)
+        if (a.onDuty !== b.onDuty) return a.onDuty ? -1 : 1;
+        // 3) ชื่อ (ไทย)
+        return String(a.name).localeCompare(String(b.name), 'th');
+    });
 }
 
 function doctorItemHtml(d) {
+    const statusBadge = d.onDuty
+        ? '<span class="badge in" style="margin-left:8px;font-size:0.75rem;">เข้าแล้ว</span>'
+        : '<span class="badge out" style="margin-left:8px;font-size:0.75rem;">ยังไม่เข้า</span>';
     return `
         <div class="stock-item member-card" style="padding:14px;">
             <div class="stock-item-head">
                 <div>
-                    <strong>${escapeHtml(d.name)}</strong>
+                    <strong>${escapeHtml(d.name)}</strong>${statusBadge}
                     <span class="stock-meta">${escapeHtml(d.role || '-')}${d.username ? ` • ${escapeHtml(d.username)}` : ''}${d.note ? ` • ${escapeHtml(d.note)}` : ''}</span>
                 </div>
             </div>
@@ -951,16 +978,41 @@ function doctorItemHtml(d) {
 function renderDoctors() {
     syncDoctorsFromUsers();
     const summaryPill = document.getElementById('doctorsSummaryPill');
-    if (summaryPill) summaryPill.textContent = `ทั้งหมด ${doctors.length} คน`;
+    if (summaryPill) {
+        const onDutyCount = doctors.filter((d) => d.onDuty).length;
+        summaryPill.textContent = `ทั้งหมด ${doctors.length} คน · เข้าเวร ${onDutyCount}`;
+    }
 
     const formWrap = document.getElementById('doctorsAddFormWrap');
     if (formWrap) formWrap.classList.add('hidden');
 
     const list = document.getElementById('doctorsList');
     if (list) {
-        list.innerHTML = doctors.length
-            ? doctors.map((d) => doctorItemHtml(d)).join('')
-            : '<div class="log-item"><strong>ยังไม่มีสมาชิกในระบบ</strong><span>เมื่อมีคนสมัครหรือมีบัญชีใน Neon จะแสดงที่นี่</span></div>';
+        if (!doctors.length) {
+            list.innerHTML = '<div class="log-item"><strong>ยังไม่มีสมาชิกในระบบ</strong><span>เมื่อมีคนสมัครหรือมีบัญชีใน Neon จะแสดงที่นี่</span></div>';
+        } else {
+            // จัดกลุ่มตามตำแหน่ง เพื่อให้อ่านง่าย
+            const groups = [];
+            let currentRole = null;
+            let currentGroup = null;
+            doctors.forEach((d) => {
+                const roleKey = d.role || '-';
+                if (roleKey !== currentRole) {
+                    currentRole = roleKey;
+                    currentGroup = { role: roleKey, items: [] };
+                    groups.push(currentGroup);
+                }
+                currentGroup.items.push(d);
+            });
+            list.innerHTML = groups.map((g) => `
+                <div class="doctors-group" style="margin-bottom:14px;">
+                    <div class="doctors-group-title" style="font-size:0.8rem;font-weight:600;opacity:0.75;margin:8px 0 6px;padding-left:2px;">
+                        ${escapeHtml(g.role)} · ${g.items.length} คน
+                    </div>
+                    ${g.items.map((d) => doctorItemHtml(d)).join('')}
+                </div>
+            `).join('');
+        }
         staggerChildren(list);
     }
 }
