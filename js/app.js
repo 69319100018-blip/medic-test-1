@@ -126,9 +126,8 @@ function saveVehicleLocal() {
 }
 
 function loadDoctorsData() {
-    doctors = loadJSON(DOCTORS_LOCAL_KEY, []);
-    if (!Array.isArray(doctors)) doctors = [];
-    doctorsOffline = true;
+    // รายชื่อแพทย์อิงจาก userProfiles (Neon users) เท่านั้น
+    syncDoctorsFromUsers();
 }
 
 function saveDoctorsLocal() {
@@ -924,44 +923,44 @@ async function confirmRemoveVehicle(id) {
 }
 
 // ============================================================
-// DOCTORS — รายชื่อแพทย์ (ทุกคนเห็นเหมือนกัน, แอดมิน/ผอ. เพิ่ม-ลบได้)
+// DOCTORS — แสดงรายชื่อจาก users ใน Neon เท่านั้น (อ่านอย่างเดียว)
 // ============================================================
+function syncDoctorsFromUsers() {
+    const profiles = (typeof userProfiles === 'object' && userProfiles) ? userProfiles : {};
+    doctors = Object.entries(profiles).map(([username, u], i) => ({
+        id: username || i,
+        name: u?.name || username,
+        role: u?.role || '-',
+        note: u?.desc || '',
+        username
+    })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
+}
+
 function doctorItemHtml(d) {
-    const canRemove = canManageDoctors(currentUser);
-    const addedByName = userProfiles[d.addedBy]?.name || d.addedBy || 'ไม่ระบุ';
     return `
-        <div class="stock-item">
+        <div class="stock-item member-card" style="padding:14px;">
             <div class="stock-item-head">
                 <div>
                     <strong>${escapeHtml(d.name)}</strong>
-                    <span class="stock-meta">${escapeHtml(d.role || 'ไม่ระบุตำแหน่ง')}${d.note ? ` • ${escapeHtml(d.note)}` : ''}${d.date ? ` • เพิ่มเมื่อ ${d.date} ${d.time || ''}` : ''} • โดย ${escapeHtml(addedByName)}</span>
+                    <span class="stock-meta">${escapeHtml(d.role || '-')}${d.username ? ` • ${escapeHtml(d.username)}` : ''}${d.note ? ` • ${escapeHtml(d.note)}` : ''}</span>
                 </div>
             </div>
-            ${canRemove ? `
-            <div class="stock-item-actions">
-                <button class="btn btn-danger btn-small doctor-remove" data-id="${d.id}" type="button">ลบ</button>
-            </div>` : ''}
         </div>`;
 }
 
 function renderDoctors() {
-    const addedByLabel = document.getElementById('doctorAddedByLabel');
-    if (addedByLabel) addedByLabel.textContent = userProfiles[currentUser]?.name || currentUser || '-';
-
+    syncDoctorsFromUsers();
     const summaryPill = document.getElementById('doctorsSummaryPill');
     if (summaryPill) summaryPill.textContent = `ทั้งหมด ${doctors.length} คน`;
 
     const formWrap = document.getElementById('doctorsAddFormWrap');
-    if (formWrap) formWrap.classList.toggle('hidden', !canManageDoctors(currentUser));
+    if (formWrap) formWrap.classList.add('hidden');
 
     const list = document.getElementById('doctorsList');
     if (list) {
         list.innerHTML = doctors.length
             ? doctors.map((d) => doctorItemHtml(d)).join('')
-            : '<div class="log-item"><strong>ยังไม่มีรายชื่อแพทย์</strong><span>แอดมินหรือผู้อำนวยการสามารถเพิ่มรายชื่อได้จากฟอร์มด้านบน</span></div>';
-        list.querySelectorAll('.doctor-remove').forEach((btn) => {
-            btn.addEventListener('click', () => confirmRemoveDoctor(btn.dataset.id));
-        });
+            : '<div class="log-item"><strong>ยังไม่มีสมาชิกในระบบ</strong><span>เมื่อมีคนสมัครหรือมีบัญชีใน Neon จะแสดงที่นี่</span></div>';
         staggerChildren(list);
     }
 }
@@ -1362,7 +1361,7 @@ async function initDashboard() {
     }
     document.getElementById('fundAdminCard')?.classList.toggle('hidden', !isAdmin(currentUser));
     document.getElementById('stockAddFormWrap')?.classList.toggle('hidden', !canManageStock(currentUser));
-    document.getElementById('doctorsAddFormWrap')?.classList.toggle('hidden', !canManageDoctors(currentUser));
+    document.getElementById('doctorsAddFormWrap')?.classList.add('hidden');
 
     // โหมด localStorage — ไม่ต้อง polling จากเซิร์ฟเวอร์
 }

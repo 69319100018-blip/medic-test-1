@@ -374,7 +374,8 @@
       try {
         await apiAddDoctor({ name, role, note });
         doctors = await apiLoadDoctors();
-        if (typeof renderDoctors === 'function') renderDoctors();
+        if (typeof syncDoctorsFromUsers === 'function') syncDoctorsFromUsers();
+            if (typeof renderDoctors === 'function') renderDoctors();
         if (nameInput) nameInput.value = '';
         if (roleInput) roleInput.value = '';
         if (noteInput) noteInput.value = '';
@@ -394,7 +395,8 @@
       try {
         await apiDeleteDoctor(id);
         doctors = await apiLoadDoctors();
-        if (typeof renderDoctors === 'function') renderDoctors();
+        if (typeof syncDoctorsFromUsers === 'function') syncDoctorsFromUsers();
+            if (typeof renderDoctors === 'function') renderDoctors();
       } catch (err) {
         if (typeof showAlert === 'function') showAlert('ลบไม่สำเร็จ', err.message, 'error');
       }
@@ -416,13 +418,14 @@
             if (typeof renderCentralFund === 'function') renderCentralFund();
             if (typeof renderStock === 'function') renderStock();
             if (typeof renderVehicles === 'function') renderVehicles();
+            if (typeof syncDoctorsFromUsers === 'function') syncDoctorsFromUsers();
             if (typeof renderDoctors === 'function') renderDoctors();
             // ---- Admin full access UI ----
             try {
               if (typeof isAdmin === 'function' && isAdmin(currentUser)) {
                 document.getElementById('fundAdminCard')?.classList.remove('hidden');
                 document.getElementById('stockAddFormWrap')?.classList.remove('hidden');
-                document.getElementById('doctorsAddFormWrap')?.classList.remove('hidden');
+                document.getElementById('doctorsAddFormWrap')?.classList.add('hidden');
                 document.getElementById('navSecurity')?.classList.remove('hidden');
                 document.getElementById('navMembers')?.classList.remove('hidden');
                 document.getElementById('vehicleAdminWrap')?.classList.remove('hidden');
