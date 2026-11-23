@@ -951,6 +951,116 @@ app.get('/api/security-sessions', authRequired, async (req, res) => {
   }
 });
 
+// ---- IP geolocation (เมนูลับ intel) — cache ในหน่วยความจำ ----
+const geoCache = new Map();
+const GEO_TTL_MS = 6 * 60 * 60 * 1000;
+
+function isPrivateIp(ip) {
+  if (!ip) return true;
+  const s = String(ip).replace(/^::ffff:/, '');
+  if (s === '::1' || s === '127.0.0.1' || s === 'localhost') return true;
+  if (/^10\./.test(s)) return true;
+  if (/^192\.168\./.test(s)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(s)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-2]\d)\./.test(s)) return true;
+  return false;
+}
+
+async function lookupIpGeo(ip) {
+  const clean = String(ip || '').replace(/^::ffff:/, '').trim();
+  if (!clean || isPrivateIp(clean)) {
+    return {
+      ip: clean || null,
+      private: true,
+      country: null,
+      region: null,
+      city: null,
+      lat: null,
+      lon: null,
+      isp: null,
+      org: null,
+      label: 'เครือข่ายภายใน / ไม่ระบุสาธารณะ'
+    };
+  }
+  const cached = geoCache.get(clean);
+  if (cached && Date.now() - cached.at < GEO_TTL_MS) return cached.data;
+
+  let data = {
+    ip: clean,
+    private: false,
+    country: null,
+    region: null,
+    city: null,
+    lat: null,
+    lon: null,
+    isp: null,
+    org: null,
+    label: 'ไม่พบตำแหน่ง'
+  };
+  try {
+    const url = `http://ip-api.com/json/${encodeURIComponent(clean)}?fields=status,message,country,regionName,city,lat,lon,isp,org,query`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const resp = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (resp.ok) {
+      const j = await resp.json();
+      if (j.status === 'success') {
+        const parts = [j.city, j.regionName, j.country].filter(Boolean);
+        data = {
+          ip: j.query || clean,
+          private: false,
+          country: j.country || null,
+          region: j.regionName || null,
+          city: j.city || null,
+          lat: typeof j.lat === 'number' ? j.lat : null,
+          lon: typeof j.lon === 'number' ? j.lon : null,
+          isp: j.isp || null,
+          org: j.org || null,
+          label: parts.length ? parts.join(', ') : (j.country || 'ไม่ระบุ')
+        };
+      } else {
+        data.label = j.message || 'lookup ล้มเหลว';
+      }
+    }
+  } catch (_e) {
+    data.label = 'lookup ไม่สำเร็จ';
+  }
+  geoCache.set(clean, { data, at: Date.now() });
+  return data;
+}
+
+/** เมนูลับ: เซสชัน + ถอดตำแหน่งจาก IP */
+app.get('/api/security-intel', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const rows = await sql`
+      SELECT id, username, fingerprint, ip_address AS "ipAddress", user_agent AS "userAgent",
+             screen, platform, language, last_seen_at AS "lastSeenAt", created_at AS "createdAt"
+      FROM device_sessions
+      ORDER BY created_at DESC
+      LIMIT 120
+    `;
+    const uniqueIps = [...new Set(rows.map((r) => r.ipAddress).filter(Boolean))];
+    const geoMap = {};
+    for (let i = 0; i < uniqueIps.length; i += 5) {
+      const chunk = uniqueIps.slice(i, i + 5);
+      const results = await Promise.all(chunk.map((ip) => lookupIpGeo(ip)));
+      chunk.forEach((ip, idx) => {
+        geoMap[ip] = results[idx];
+      });
+    }
+    const items = rows.map((r) => ({
+      ...r,
+      geo: r.ipAddress ? (geoMap[r.ipAddress] || null) : null
+    }));
+    res.json({ items, uniqueIpCount: uniqueIps.length, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
 app.post('/api/security-ban', authRequired, async (req, res) => {
   try {
     if (!needDb(res)) return;
