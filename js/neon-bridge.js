@@ -505,7 +505,7 @@
           banList.innerHTML = active.length ? active.map((b) => `
             <div class="stock-item">
               <div class="stock-item-head"><div>
-                <strong>${b.fingerprint || '-'} / ${b.ipAddress || '-'}</strong>
+                <strong>${b.ipAddress || b.username || '-'}</strong>
                 <span class="stock-meta">${b.username || ''} • ${b.reason || ''} • โดย ${b.bannedBy || ''}</span>
               </div></div>
               <div class="stock-item-actions">
@@ -526,7 +526,7 @@
             <div class="stock-item">
               <div class="stock-item-head"><div>
                 <strong>${s.username || '-'} • ${s.ipAddress || '-'}</strong>
-                <span class="stock-meta">${s.fingerprint || ''} • ${(s.userAgent || '').slice(0, 80)}</span>
+                <span class="stock-meta">${s.ipAddress || ''} • ${(s.userAgent || '').slice(0, 80)}</span>
               </div></div>
               <div class="stock-item-actions">
                 <button class="btn btn-danger btn-small ban-from-session" data-fp="${s.fingerprint || ''}" data-ip="${s.ipAddress || ''}" data-user="${s.username || ''}" type="button">บล็อก</button>
@@ -554,12 +554,12 @@
       btn.onclick = async () => {
         try {
           await apiCreateBan({
-            fingerprint: document.getElementById('banFingerprintInput')?.value.trim() || null,
+            fingerprint: null,
             ipAddress: document.getElementById('banIpInput')?.value.trim() || null,
             username: document.getElementById('banUsernameInput')?.value.trim() || null,
             reason: document.getElementById('banReasonInput')?.value.trim() || 'ละเมิดกฎ'
           });
-          ['banFingerprintInput', 'banIpInput', 'banUsernameInput', 'banReasonInput'].forEach((id) => {
+          ['banIpInput', 'banUsernameInput', 'banReasonInput'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.value = '';
           });
@@ -600,39 +600,46 @@
         list.innerHTML = entries.map(([username, u]) => {
           const roleOptions = ROLE_PRESETS.map((r) =>
             `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`
-          ).join('') + (ROLE_PRESETS.includes(u.role) ? '' : `<option value="${escapeHtml(u.role || '')}" selected>${escapeHtml(u.role || '')}</option>`);
+          ).join('') + (ROLE_PRESETS.includes(u.role) ? '' : `<option value="${(u.role || '').replace(/"/g, '&quot;')}" selected>${(u.role || '').replace(/</g, '&lt;')}</option>`);
+          const safeUser = String(username).replace(/"/g, '&quot;');
+          const safeName = String(u.name || username).replace(/</g, '&lt;');
           return `
-            <div class="stock-item" data-user="${escapeHtml(username)}">
-              <div class="stock-item-head">
-                <div>
-                  <strong>${escapeHtml(u.name || username)}</strong>
-                  <span class="stock-meta">${escapeHtml(username)} • ปัจจุบัน: ${escapeHtml(u.role || '-')}</span>
-                </div>
-              </div>
-              <div class="stock-item-body" style="display:grid;gap:8px;">
-                <label>Role / ตำแหน่ง
-                  <select class="form-control member-role">
+            <article class="member-card" data-user="${safeUser}">
+              <header class="member-card-head">
+                <div class="member-card-title">${safeName}</div>
+                <div class="member-card-sub">${safeUser}</div>
+                <div class="member-card-badge">${(u.role || '-').replace(/</g, '&lt;')}</div>
+              </header>
+              <div class="member-card-body">
+                <label class="member-field">
+                  <span>Role / ตำแหน่ง</span>
+                  <select class="member-role">
                     ${roleOptions}
                     <option value="__custom__">กำหนดเอง...</option>
                   </select>
                 </label>
-                <label class="member-custom-role hidden">Role กำหนดเอง
-                  <input type="text" class="form-control member-role-custom" placeholder="พิมพ์ตำแหน่ง">
+                <label class="member-field member-custom-role hidden">
+                  <span>Role กำหนดเอง</span>
+                  <input type="text" class="member-role-custom" placeholder="พิมพ์ตำแหน่ง">
                 </label>
-                <label style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" class="member-admin" ${u.isAdmin ? 'checked' : ''}> สิทธิ์แอดมิน
-                </label>
-                <label style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" class="member-monitor" ${u.canViewMonitoring ? 'checked' : ''}> ดูภาพรวมทีม / ตรวจสอบ
-                </label>
+                <div class="member-checks">
+                  <label class="member-check">
+                    <input type="checkbox" class="member-admin" ${u.isAdmin ? 'checked' : ''}>
+                    <span>สิทธิ์แอดมิน</span>
+                  </label>
+                  <label class="member-check">
+                    <input type="checkbox" class="member-monitor" ${u.canViewMonitoring ? 'checked' : ''}>
+                    <span>ดูภาพรวมทีม / ตรวจสอบ</span>
+                  </label>
+                </div>
               </div>
-              <div class="stock-item-actions">
+              <footer class="member-card-foot">
                 <button class="btn btn-success btn-small member-save" type="button">บันทึก</button>
-              </div>
-            </div>`;
+              </footer>
+            </article>`;
         }).join('');
 
-        list.querySelectorAll('.stock-item').forEach((card) => {
+        list.querySelectorAll('.member-card').forEach((card) => {
           const roleSel = card.querySelector('.member-role');
           const customWrap = card.querySelector('.member-custom-role');
           roleSel?.addEventListener('change', () => {
