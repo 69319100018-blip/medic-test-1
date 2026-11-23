@@ -23,6 +23,7 @@ function clearSession() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
   sessionStorage.removeItem(PROFILE_KEY);
+  sessionStorage.removeItem('loggedInUser');
 }
 
 async function api(path, options = {}) {

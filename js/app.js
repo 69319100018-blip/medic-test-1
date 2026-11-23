@@ -1302,6 +1302,9 @@ function bindDashboardEvents() {
     document.getElementById('btnAddDoctor')?.addEventListener('click', handleAddDoctor);
     document.getElementById('btnLogout')?.addEventListener('click', () => {
         sessionStorage.removeItem('loggedInUser');
+        sessionStorage.removeItem('medicUser');
+        sessionStorage.removeItem('medicProfile');
+        sessionStorage.removeItem('medicToken');
         window.location.href = 'index.html';
     });
     document.querySelectorAll('.nav-link').forEach((link) => link.addEventListener('click', handleMenuSwitch));
@@ -1309,11 +1312,13 @@ function bindDashboardEvents() {
 }
 
 async function initDashboard() {
-    currentUser = sessionStorage.getItem('loggedInUser');
+    currentUser = sessionStorage.getItem('loggedInUser') || sessionStorage.getItem('medicUser');
     if (!currentUser) {
         window.location.href = 'index.html';
         return;
     }
+    // sync ทั้งสอง key กันดีดออก
+    sessionStorage.setItem('loggedInUser', currentUser);
     startClock();
     bindDashboardEvents();
 

@@ -24,6 +24,8 @@
       if (btn) btn.disabled = true;
       try {
         const result = await apiLogin(username, password);
+        // sync key ที่ app.js ใช้ตรวจ session
+        sessionStorage.setItem('loggedInUser', result.username);
         if (typeof userProfiles !== 'undefined') {
           userProfiles[result.username] = result.profile;
         }
@@ -383,11 +385,10 @@
 
     document.getElementById('btnLogout')?.addEventListener('click', () => {
       if (typeof clearSession === 'function') clearSession();
-      else {
-        sessionStorage.removeItem('medicUser');
-        sessionStorage.removeItem('medicProfile');
-        sessionStorage.removeItem('medicToken');
-      }
+      sessionStorage.removeItem('medicUser');
+      sessionStorage.removeItem('medicProfile');
+      sessionStorage.removeItem('medicToken');
+      sessionStorage.removeItem('loggedInUser');
     }, true);
 
     const boot = () => {
