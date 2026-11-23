@@ -454,7 +454,9 @@ label {
 #vehicleSection,
 #doctorsSection,
 #historySection,
-#stockHistorySection {
+#stockHistorySection,
+#securitySection,
+#membersSection {
     grid-column: 1 / -1;
 }
 
