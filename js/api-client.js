@@ -47,7 +47,15 @@ async function api(path, options = {}) {
     }
     throw new Error(data.error || 'ต้องเข้าสู่ระบบก่อน');
   }
-  if (!res.ok) throw new Error(data.error || res.statusText || 'API error');
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error('ไม่พบ API (404) — ตรวจว่า deploy ฝั่ง serverless และตั้ง DATABASE_URL / JWT_SECRET บน Vercel แล้ว');
+    }
+    if (res.status === 503) {
+      throw new Error(data.error || 'เซิร์ฟเวอร์ยังไม่พร้อม (ตรวจ Environment Variables)');
+    }
+    throw new Error(data.error || res.statusText || 'API error');
+  }
   return data;
 }
 

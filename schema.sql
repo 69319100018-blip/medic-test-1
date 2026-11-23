@@ -117,7 +117,12 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (username, password_hash, display_name, role, avatar, is_admin, can_view_monitoring, description)
 VALUES
-    ('talos blackagency', '001', 'Talos Blackagency', 'ผู้อำนวยการแพทย์', 'assets/images/talos.jpg', true,  true,  'ควบคุมและตรวจสอบทีมเวร'),
-    ('noelle blackagency', '002', 'Noelle Blackagency', 'รอง.ผู้อำนวยการ', 'assets/images/noeele.jpg', false, false, 'สนับสนุนงานประสานงาน'),
-    ('jane doe', '003', 'Jane Doe', 'พยาบาล', 'assets/images/jane.jpg', false, false, 'ดูแลผู้ป่วย')
+    ('talos blackagency', '$2b$10$b14My6yUItAL/vZZTonZA.GNqvWA13bQDa65QcJWo4cN66orSMoGu', 'Talos Blackagency', 'ผู้อำนวยการแพทย์', 'assets/images/talos.jpg', true,  true,  'ควบคุมและตรวจสอบทีมเวร'),
+    ('noelle blackagency', '$2b$10$NN3DqBFZuViWUDuG8UXh6uKn.xPPqo6ke089NVOBLhhWUTG3Wc9rO', 'Noelle Blackagency', 'รอง.ผู้อำนวยการ', 'assets/images/noeele.jpg', false, false, 'สนับสนุนงานประสานงาน'),
+    ('jane doe', '$2b$10$h/UOy9QcG/qn29OZD0/gEOWRqleDGEkBGX9U2iXzYbxqwLTKvo7Se', 'Jane Doe', 'พยาบาล', 'assets/images/jane.jpg', false, false, 'ดูแลผู้ป่วย')
 ON CONFLICT (username) DO NOTHING;
+
+-- ถ้าเคยรัน schema เก่าที่มี plain password ให้อัปเดตเป็น bcrypt:
+-- UPDATE users SET password_hash = '$2b$10$b14My6yUItAL/vZZTonZA.GNqvWA13bQDa65QcJWo4cN66orSMoGu' WHERE username = 'talos blackagency';
+-- UPDATE users SET password_hash = '$2b$10$NN3DqBFZuViWUDuG8UXh6uKn.xPPqo6ke089NVOBLhhWUTG3Wc9rO' WHERE username = 'noelle blackagency';
+-- UPDATE users SET password_hash = '$2b$10$h/UOy9QcG/qn29OZD0/gEOWRqleDGEkBGX9U2iXzYbxqwLTKvo7Se' WHERE username = 'jane doe';
