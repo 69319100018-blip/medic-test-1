@@ -1,7 +1,7 @@
 /**
  * Vercel Serverless entry — ใช้ logic เดียวกับ server.js
  * ตั้ง Environment Variables บน Vercel:
- *   DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS
+ *   DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS, DISCORD_WEBHOOK_URL, DISCORD_GUILD_ID
  */
 require('dotenv').config();
 const express = require('express');
@@ -15,6 +15,8 @@ const { neon } = require('@neondatabase/serverless');
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const JWT_EXPIRES = '12h';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || '';
 
 if (!process.env.DATABASE_URL) {
   console.error('Missing DATABASE_URL');
@@ -140,6 +142,58 @@ async function logSecurityEvent({ eventType, username, fingerprint, ip, detail }
     `;
   } catch (e) {
     console.error('logSecurityEvent', e);
+  }
+}
+
+
+async function notifyDiscordShift({ type, username, displayName, role, date, time, duration, isForced }) {
+  if (!DISCORD_WEBHOOK_URL) return;
+  const isIn = type === 'เข้าเวร';
+  const color = isIn ? 0x22c55e : (isForced ? 0xf59e0b : 0xef4444);
+  const title = isIn ? '✅ เข้าเวร' : (isForced ? '⚠️ ถูกบังคับออกเวร' : '🚪 ออกเวร');
+  const fields = [
+    { name: 'ผู้ใช้', value: displayName || username || '-', inline: true },
+    { name: 'ตำแหน่ง', value: role || '-', inline: true },
+    { name: 'วันที่', value: date || '-', inline: true },
+    { name: 'เวลา', value: time || '-', inline: true }
+  ];
+  if (!isIn && duration) fields.push({ name: 'ระยะเวลา', value: duration, inline: true });
+  if (DISCORD_GUILD_ID) fields.push({ name: 'Server ID', value: DISCORD_GUILD_ID, inline: true });
+
+  const body = {
+    username: 'Medic Shift Bot',
+    embeds: [{
+      title,
+      color,
+      fields,
+      footer: { text: 'Medic Shift Log' },
+      timestamp: new Date().toISOString()
+    }]
+  };
+
+  try {
+    const res = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('Discord webhook failed', res.status, text);
+    }
+  } catch (e) {
+    console.error('Discord webhook error', e);
+  }
+}
+
+async function lookupUserProfile(username) {
+  try {
+    const rows = await sql`
+      SELECT display_name AS name, role FROM users WHERE username = ${username} LIMIT 1
+    `;
+    return rows[0] || { name: username, role: '-' };
+  } catch {
+    return { name: username, role: '-' };
   }
 }
 
@@ -307,6 +361,16 @@ app.post('/api/shift-checkin', authRequired, async (req, res) => {
       VALUES (${username}, 'เข้าเวร', ${t.iso}, ${t.date}, ${t.time})
       RETURNING id, username, type, datetime, date_th AS date, time_th AS time
     `;
+    const profile = await lookupUserProfile(username);
+    // แจ้ง Discord แบบไม่บล็อก response
+    notifyDiscordShift({
+      type: 'เข้าเวร',
+      username,
+      displayName: profile.name,
+      role: profile.role,
+      date: t.date,
+      time: t.time
+    }).catch(() => {});
     res.json(inserted[0]);
   } catch (err) {
     safeError(res, err);
@@ -343,6 +407,17 @@ app.post('/api/shift-checkout', authRequired, async (req, res) => {
       VALUES (${username}, 'ออกเวร', ${t.date}, ${t.time}, ${duration}, ${!!isForced})
       RETURNING id, username, type, date_th AS date, time_th AS time, duration, is_forced AS "isForced"
     `;
+    const profile = await lookupUserProfile(username);
+    notifyDiscordShift({
+      type: 'ออกเวร',
+      username,
+      displayName: profile.name,
+      role: profile.role,
+      date: t.date,
+      time: t.time,
+      duration,
+      isForced: !!isForced
+    }).catch(() => {});
     res.json({ ...inserted[0], duration });
   } catch (err) {
     safeError(res, err);
