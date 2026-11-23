@@ -578,70 +578,149 @@
   };
 
   // ============================================================
-  // เมนูลับ Intel — ถอดตำแหน่งจาก IP (เฉพาะแอดมิน)
-  // ปลดล็อก: คลิกโลโก้/ชื่อแบรนด์ด้านบน 5 ครั้งติดกันภายใน 4 วินาที
+  // เมนูลับ Intel — คีย์ลัด: กด Numpad 1 (หรือ 1) สามครั้ง
   // ============================================================
   window.__intelUnlocked = false;
+
+  function openIntelSecretMenu() {
+    if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) {
+      if (typeof showAlert === 'function') showAlert('ไม่มีสิทธิ์', 'เฉพาะแอดมินเท่านั้น', 'warning');
+      return;
+    }
+    window.__intelUnlocked = true;
+    const nav = document.getElementById('navIntel');
+    nav?.classList.remove('hidden');
+    // สลับไปหน้า Intel ทันที
+    document.querySelectorAll('.nav-link').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.target === 'intelSection');
+    });
+    document.querySelectorAll('main section').forEach((section) => {
+      section.classList.toggle('hidden', section.id !== 'intelSection');
+    });
+    const panel = document.getElementById('intelSection');
+    if (panel && typeof playSectionEnter === 'function') playSectionEnter(panel);
+    if (typeof showAlert === 'function') {
+      showAlert('เมนูลับ Intel', 'กด Num1 × 3 แล้ว — เลือก IP เพื่อถอดตำแหน่ง', 'success');
+    }
+    if (typeof setupIntelAdmin === 'function') setupIntelAdmin(true);
+  }
 
   window.setupIntelUnlock = function () {
     if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
     if (window.__intelUnlockBound) return;
     window.__intelUnlockBound = true;
 
-    let clicks = 0;
+    let count = 0;
     let timer = null;
-    const targets = [
-      document.querySelector('.brand'),
-      document.querySelector('.sidebar-brand'),
-      document.querySelector('.logo'),
-      document.querySelector('.sidebar .brand-title'),
-      document.querySelector('.sidebar h1'),
-      document.querySelector('.sidebar .nav-brand'),
-      document.getElementById('navSecurity')
-    ].filter(Boolean);
+    document.addEventListener('keydown', (e) => {
+      // ไม่นับตอนพิมพ์ใน input/textarea/select
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return;
 
-    const onSecretClick = (e) => {
-      // กด Shift ค้างแล้วคลิก "ความปลอดภัย" ก็ปลดล็อกได้
-      if (e.currentTarget?.id === 'navSecurity' && !e.shiftKey) return;
-      clicks += 1;
-      clearTimeout(timer);
-      timer = setTimeout(() => { clicks = 0; }, 4000);
-      if (clicks < 5 && !(e.currentTarget?.id === 'navSecurity' && e.shiftKey)) return;
-      clicks = 0;
-      window.__intelUnlocked = true;
-      document.getElementById('navIntel')?.classList.remove('hidden');
-      if (typeof showAlert === 'function') {
-        showAlert('ปลดล็อกเมนูลับ', 'Intel — ตำแหน่งจาก IP พร้อมใช้งานแล้ว', 'success');
+      const isNum1 = e.code === 'Numpad1' || e.key === '1' || e.code === 'Digit1';
+      if (!isNum1) {
+        count = 0;
+        return;
       }
-    };
+      // ถ้าเป็น Digit1 บนแถวตัวเลข ต้องไม่มี modifier พิเศษ
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
 
-    if (targets.length) {
-      targets.forEach((el) => el.addEventListener('click', onSecretClick));
-    } else {
-      // fallback: กด Ctrl+Shift+I (ไม่ใช่ DevTools shortcut บนบางเบราว์เซอร์ — ใช้ Alt+Shift+I)
-      document.addEventListener('keydown', (e) => {
-        if (e.altKey && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
-          e.preventDefault();
-          window.__intelUnlocked = true;
-          document.getElementById('navIntel')?.classList.remove('hidden');
-          if (typeof showAlert === 'function') {
-            showAlert('ปลดล็อกเมนูลับ', 'Intel — ตำแหน่งจาก IP พร้อมใช้งานแล้ว', 'success');
-          }
-        }
-      });
-    }
+      count += 1;
+      clearTimeout(timer);
+      timer = setTimeout(() => { count = 0; }, 1200);
+      if (count >= 3) {
+        count = 0;
+        e.preventDefault();
+        openIntelSecretMenu();
+      }
+    });
   };
 
-  window.setupIntelAdmin = async function () {
+  window.setupIntelAdmin = async function (forceReload) {
     if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
     if (!window.__intelUnlocked) return;
     const list = document.getElementById('intelList');
     const summary = document.getElementById('intelSummary');
     const btn = document.getElementById('btnRefreshIntel');
+    const ipSelect = document.getElementById('intelIpSelect');
+    const ipInput = document.getElementById('intelIpInput');
+    const btnLookup = document.getElementById('btnIntelLookup');
+    const lookupResult = document.getElementById('intelLookupResult');
     if (!list) return;
 
+    function renderGeoCard(g, users) {
+      if (!g) return '<div class="log-item"><strong>ไม่มีข้อมูล</strong></div>';
+      const loc = g.label || '—';
+      const isp = [g.isp, g.org].filter(Boolean).join(' · ') || '—';
+      const coords = (typeof g.lat === 'number' && typeof g.lon === 'number')
+        ? `${g.lat.toFixed(5)}, ${g.lon.toFixed(5)}`
+        : '—';
+      const mapLink = (typeof g.lat === 'number' && typeof g.lon === 'number')
+        ? `<a href="https://www.openstreetmap.org/?mlat=${g.lat}&mlon=${g.lon}#map=14/${g.lat}/${g.lon}" target="_blank" rel="noopener" class="btn btn-secondary btn-small">เปิดแผนที่</a>
+           <a href="https://maps.google.com/?q=${g.lat},${g.lon}" target="_blank" rel="noopener" class="btn btn-secondary btn-small">Google Maps</a>`
+        : '';
+      const usersLine = (users && users.length)
+        ? `<span class="stock-meta" style="display:block;">บัญชีที่เคยใช้ IP นี้: ${users.map((u) => String(u).replace(/</g, '&lt;')).join(', ')}</span>`
+        : '';
+      return `
+        <div class="stock-item" style="padding:14px;">
+          <div class="stock-item-head"><div>
+            <strong>📍 ${String(loc).replace(/</g, '&lt;')}</strong>
+            ${g.private ? ' <span class="badge out">private</span>' : ''}
+            <span class="stock-meta" style="display:block;margin-top:4px;">IP: ${String(g.ip || '-').replace(/</g, '&lt;')}</span>
+            <span class="stock-meta" style="display:block;">เมือง: ${String(g.city || '—').replace(/</g, '&lt;')} · จังหวัด/รัฐ: ${String(g.region || '—').replace(/</g, '&lt;')}</span>
+            <span class="stock-meta" style="display:block;">ประเทศ: ${String(g.country || '—').replace(/</g, '&lt;')} · รหัสไปรษณีย์: ${String(g.zip || '—').replace(/</g, '&lt;')}</span>
+            <span class="stock-meta" style="display:block;">พิกัด: ${coords} · โซนเวลา: ${String(g.timezone || '—').replace(/</g, '&lt;')}</span>
+            <span class="stock-meta" style="display:block;">ISP / Org: ${String(isp).replace(/</g, '&lt;')}</span>
+            <span class="stock-meta" style="display:block;">AS: ${String(g.as || '—').replace(/</g, '&lt;')} · แหล่งข้อมูล: ${(g.sources || []).join(', ') || '—'}</span>
+            ${usersLine}
+            <span class="stock-meta" style="display:block;opacity:0.75;margin-top:4px;">${String(g.accuracyNote || '').replace(/</g, '&lt;')}</span>
+          </div></div>
+          <div class="stock-item-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            ${mapLink}
+            <button class="btn btn-danger btn-small intel-ban-lookup" type="button" data-ip="${String(g.ip || '').replace(/"/g, '&quot;')}">บล็อก IP นี้</button>
+          </div>
+        </div>`;
+    }
+
+    async function doLookup() {
+      const fromSelect = ipSelect?.value?.trim() || '';
+      const fromInput = ipInput?.value?.trim() || '';
+      const ip = fromInput || fromSelect;
+      if (!ip) {
+        if (typeof showAlert === 'function') showAlert('ระบุ IP', 'เลือกจากรายการหรือพิมพ์ IP', 'warning');
+        return;
+      }
+      if (lookupResult) {
+        lookupResult.innerHTML = '<div class="log-item"><strong>กำลังคำนวณตำแหน่ง...</strong><span>ดึงจากหลายแหล่ง</span></div>';
+      }
+      try {
+        const res = await apiLookupIpGeo(ip);
+        if (lookupResult) {
+          lookupResult.innerHTML = renderGeoCard(res.geo, res.users);
+          lookupResult.querySelectorAll('.intel-ban-lookup').forEach((el) => {
+            el.addEventListener('click', async () => {
+              try {
+                await apiCreateBan({
+                  ipAddress: el.dataset.ip || ip,
+                  reason: 'บล็อกจาก Intel lookup'
+                });
+                if (typeof showAlert === 'function') showAlert('บล็อกแล้ว', el.dataset.ip || ip, 'success');
+              } catch (err) {
+                if (typeof showAlert === 'function') showAlert('บล็อกไม่สำเร็จ', err.message, 'error');
+              }
+            });
+          });
+        }
+      } catch (e) {
+        if (lookupResult) {
+          lookupResult.innerHTML = `<div class="log-item"><strong>คำนวณไม่สำเร็จ</strong><span>${(e.message || '').replace(/</g, '&lt;')}</span></div>`;
+        }
+      }
+    }
+
     async function refresh() {
-      list.innerHTML = '<div class="log-item"><strong>กำลังถอดตำแหน่งจาก IP...</strong><span>อาจใช้เวลาสักครู่</span></div>';
+      list.innerHTML = '<div class="log-item"><strong>กำลังโหลดเซสชัน...</strong></div>';
       if (summary) summary.textContent = 'กำลังโหลด...';
       try {
         if (typeof apiLoadSecurityIntel !== 'function') {
@@ -650,61 +729,50 @@
         }
         const data = await apiLoadSecurityIntel();
         const items = data?.items || [];
+        const ipOptions = data?.ipOptions || [];
+
+        if (ipSelect) {
+          const prev = ipSelect.value;
+          ipSelect.innerHTML = '<option value="">— เลือกรายชื่อ / IP —</option>' +
+            ipOptions.map((o) => {
+              const label = `${o.username || '?'} · ${o.ip}${o.geo?.label ? ' · ' + o.geo.label : ''}`;
+              return `<option value="${String(o.ip).replace(/"/g, '&quot;')}">${label.replace(/</g, '&lt;')}</option>`;
+            }).join('');
+          if (prev) ipSelect.value = prev;
+        }
+
         if (summary) {
           const t = data?.generatedAt ? new Date(data.generatedAt).toLocaleString('th-TH') : '-';
           summary.textContent = `${items.length} เซสชัน · IP เฉพาะ ${data?.uniqueIpCount ?? '-'} · อัปเดต ${t}`;
         }
         if (!items.length) {
-          list.innerHTML = '<div class="log-item"><strong>ยังไม่มีเซสชัน</strong><span>เมื่อมีคนล็อกอิน ระบบจะเก็บ IP แล้วถอดตำแหน่งได้ที่นี่</span></div>';
+          list.innerHTML = '<div class="log-item"><strong>ยังไม่มีเซสชัน</strong><span>เมื่อมีคนล็อกอิน ระบบจะเก็บ IP ไว้ให้เลือก</span></div>';
           return;
         }
         list.innerHTML = items.map((s) => {
           const g = s.geo || {};
           const loc = g.label || '—';
-          const isp = [g.isp, g.org].filter(Boolean).join(' · ') || '—';
-          const mapLink = (typeof g.lat === 'number' && typeof g.lon === 'number')
-            ? `<a href="https://www.openstreetmap.org/?mlat=${g.lat}&mlon=${g.lon}#map=12/${g.lat}/${g.lon}" target="_blank" rel="noopener" class="btn btn-secondary btn-small">แผนที่</a>`
-            : '';
           const when = s.createdAt ? new Date(s.createdAt).toLocaleString('th-TH') : '-';
-          const ua = (s.userAgent || '').slice(0, 90);
-          const safeUser = String(s.username || '').replace(/"/g, '&quot;');
           const safeIp = String(s.ipAddress || '').replace(/"/g, '&quot;');
-          const safeFp = String(s.fingerprint || '').replace(/"/g, '&quot;');
           return `
-            <div class="stock-item" style="padding:14px;">
-              <div class="stock-item-head">
-                <div>
-                  <strong>${(s.username || '-').replace(/</g, '&lt;')}</strong>
-                  <span class="stock-meta">IP ${s.ipAddress || '-'} · ${when}</span>
-                  <span class="stock-meta" style="display:block;margin-top:4px;">
-                    📍 ${String(loc).replace(/</g, '&lt;')}
-                    ${g.private ? ' <span class="badge out">private</span>' : ''}
-                  </span>
-                  <span class="stock-meta" style="display:block;">ISP: ${String(isp).replace(/</g, '&lt;')}</span>
-                  ${ua ? `<span class="stock-meta" style="display:block;opacity:0.7;">${ua.replace(/</g, '&lt;')}</span>` : ''}
-                </div>
-              </div>
-              <div class="stock-item-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                ${mapLink}
-                <button class="btn btn-danger btn-small intel-ban" type="button"
-                  data-fp="${safeFp}" data-ip="${safeIp}" data-user="${safeUser}">บล็อก</button>
+            <div class="stock-item" style="padding:12px;">
+              <div class="stock-item-head"><div>
+                <strong>${(s.username || '-').replace(/</g, '&lt;')}</strong>
+                <span class="stock-meta">IP ${s.ipAddress || '-'} · ${when}</span>
+                <span class="stock-meta" style="display:block;">📍 ${String(loc).replace(/</g, '&lt;')}</span>
+              </div></div>
+              <div class="stock-item-actions" style="margin-top:6px;">
+                <button class="btn btn-secondary btn-small intel-pick-ip" type="button" data-ip="${safeIp}">เลือก IP นี้</button>
               </div>
             </div>`;
         }).join('');
 
-        list.querySelectorAll('.intel-ban').forEach((el) => {
-          el.addEventListener('click', async () => {
-            try {
-              await apiCreateBan({
-                fingerprint: el.dataset.fp || null,
-                ipAddress: el.dataset.ip || null,
-                username: el.dataset.user || null,
-                reason: 'บล็อกจากเมนู Intel'
-              });
-              if (typeof showAlert === 'function') showAlert('บล็อกแล้ว', el.dataset.ip || el.dataset.user || '', 'success');
-            } catch (e) {
-              if (typeof showAlert === 'function') showAlert('บล็อกไม่สำเร็จ', e.message, 'error');
-            }
+        list.querySelectorAll('.intel-pick-ip').forEach((el) => {
+          el.addEventListener('click', () => {
+            const ip = el.dataset.ip || '';
+            if (ipInput) ipInput.value = ip;
+            if (ipSelect) ipSelect.value = ip;
+            doLookup();
           });
         });
       } catch (e) {
@@ -717,7 +785,20 @@
       btn.dataset.bound = '1';
       btn.addEventListener('click', () => refresh());
     }
-    refresh();
+    if (btnLookup && !btnLookup.dataset.bound) {
+      btnLookup.dataset.bound = '1';
+      btnLookup.addEventListener('click', () => doLookup());
+    }
+    if (ipSelect && !ipSelect.dataset.bound) {
+      ipSelect.dataset.bound = '1';
+      ipSelect.addEventListener('change', () => {
+        if (ipSelect.value && ipInput) ipInput.value = ipSelect.value;
+      });
+    }
+    if (forceReload || !list.dataset.loaded) {
+      list.dataset.loaded = '1';
+      refresh();
+    }
   };
 
   window.setupMembersAdmin = async function () {
