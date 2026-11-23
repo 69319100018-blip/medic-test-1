@@ -1,48 +1,82 @@
 /**
- * Medic Shift Log — API Client (Neon)
- * ใช้แทน localStorage ทั้งหมด
- * ต้องรัน API server ก่อน (โฟลเดอร์ api/)
+ * Medic Shift Log — API Client (Secure + JWT)
  */
-const API_BASE = window.location.origin.includes('localhost') || window.location.protocol === 'file:'
+const API_BASE = (window.location.origin.includes('localhost') || window.location.protocol === 'file:')
   ? 'http://localhost:3000'
-  : ''; // ถ้า deploy ร่วมกับ API ใช้ relative path
+  : '';
+
+const TOKEN_KEY = 'medicToken';
+const USER_KEY = 'medicUser';
+const PROFILE_KEY = 'medicProfile';
+
+function getToken() {
+  return sessionStorage.getItem(TOKEN_KEY) || '';
+}
+
+function setSession(username, profile, token) {
+  sessionStorage.setItem(TOKEN_KEY, token || '');
+  sessionStorage.setItem(USER_KEY, username || '');
+  sessionStorage.setItem(PROFILE_KEY, JSON.stringify(profile || {}));
+}
+
+function clearSession() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(PROFILE_KEY);
+}
 
 async function api(path, options = {}) {
   const url = `${API_BASE}/api${path}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    clearSession();
+    if (!window.location.pathname.includes('index')) {
+      window.location.href = 'index.html';
+    }
+    throw new Error(data.error || 'ต้องเข้าสู่ระบบก่อน');
+  }
   if (!res.ok) throw new Error(data.error || res.statusText || 'API error');
   return data;
 }
 
-// ---------- Auth ----------
 async function apiLogin(username, password) {
-  return api('/login', { method: 'POST', body: { username, password } });
+  const data = await api('/login', { method: 'POST', body: { username, password } });
+  if (data.token) setSession(data.username, data.profile, data.token);
+  return data;
 }
 
 async function apiLoadUsers() {
   return api('/users');
 }
 
-// ---------- Shifts ----------
 async function apiLoadShifts(username) {
   const q = username ? `?username=${encodeURIComponent(username)}` : '';
   return api(`/shifts${q}`);
 }
 
-async function apiCheckIn(username) {
-  return api('/shifts/checkin', { method: 'POST', body: { username } });
+async function apiCheckIn() {
+  return api('/shifts/checkin', { method: 'POST', body: {} });
 }
 
 async function apiCheckOut(username, isForced = false) {
-  return api('/shifts/checkout', { method: 'POST', body: { username, isForced } });
+  return api('/shifts/checkout', {
+    method: 'POST',
+    body: { isForced, username: isForced ? username : undefined }
+  });
 }
 
-// ---------- Fund ----------
 async function apiLoadFund() {
   return api('/fund');
 }
@@ -51,7 +85,6 @@ async function apiFundTransaction(payload) {
   return api('/fund/transaction', { method: 'POST', body: payload });
 }
 
-// ---------- Stock ----------
 async function apiLoadStock() {
   return api('/stock');
 }
@@ -76,7 +109,6 @@ async function apiLoadStockWithdrawals() {
   return api('/stock/withdrawals');
 }
 
-// ---------- Vehicles ----------
 async function apiLoadVehicles() {
   return api('/vehicles');
 }
@@ -89,7 +121,6 @@ async function apiDeleteVehicle(id) {
   return api(`/vehicles/${id}`, { method: 'DELETE' });
 }
 
-// ---------- Doctors ----------
 async function apiLoadDoctors() {
   return api('/doctors');
 }

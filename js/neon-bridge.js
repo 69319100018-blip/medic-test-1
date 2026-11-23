@@ -1,67 +1,51 @@
 /**
- * Neon Bridge — แทนที่ data layer ของ app.js ให้ใช้ Neon ผ่าน API
- * โหลดหลัง app.js
- * ต้องรัน API (โฟลเดอร์ api/) ก่อนใช้งาน
+ * Neon Bridge (Secure) — JWT session + API overrides
  */
 (function () {
   'use strict';
 
   if (typeof api !== 'function') {
-    console.warn('[Neon] ไม่พบ api-client.js — ยังใช้ localStorage อยู่');
+    console.warn('[Neon] ไม่พบ api-client.js');
     return;
   }
 
-  console.log('[Neon] เปิดโหมด Neon Database');
+  console.log('[Neon] Secure mode');
 
   // ---------- Login ----------
-  // หา form login แล้ว override
   document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('loginForm');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const username = (document.getElementById('usernameInput')?.value || '').trim().toLowerCase();
-        const password = document.getElementById('passwordInput')?.value || '';
-        const btn = document.getElementById('btnLogin');
-        if (btn) btn.disabled = true;
-        try {
-          const result = await apiLogin(username, password);
-          // เก็บ session แบบง่าย
-          sessionStorage.setItem('medicUser', result.username);
-          sessionStorage.setItem('medicProfile', JSON.stringify(result.profile));
-          // อัปเดต userProfiles ถ้ามี
-          if (typeof userProfiles !== 'undefined') {
-            userProfiles[result.username] = result.profile;
-          }
-          if (typeof users !== 'undefined') {
-            users[result.username] = password; // เผื่อโค้ดเก่าเช็ค
-          }
-          window.location.href = 'dashboard.html';
-        } catch (err) {
-          if (window.Swal) {
-            Swal.fire('เข้าสู่ระบบไม่สำเร็จ', err.message || 'ลองใหม่', 'error');
-          } else {
-            alert(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
-          }
-        } finally {
-          if (btn) btn.disabled = false;
+    if (!form) return;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const username = (document.getElementById('usernameInput')?.value || '').trim().toLowerCase();
+      const password = document.getElementById('passwordInput')?.value || '';
+      const btn = document.getElementById('btnLogin');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await apiLogin(username, password);
+        if (typeof userProfiles !== 'undefined') {
+          userProfiles[result.username] = result.profile;
         }
-      }, true);
-    }
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        if (window.Swal) Swal.fire('เข้าสู่ระบบไม่สำเร็จ', err.message || 'ลองใหม่', 'error');
+        else alert(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }, true);
   });
 
-  // ---------- Dashboard: โหลด session + ข้อมูลจาก API ----------
+  // ---------- Dashboard ----------
   if (window.location.pathname.includes('dashboard') || document.body.classList.contains('dashboard-body')) {
     const savedUser = sessionStorage.getItem('medicUser');
     const savedProfile = sessionStorage.getItem('medicProfile');
-    if (!savedUser) {
+    const token = sessionStorage.getItem('medicToken');
+    if (!savedUser || !token) {
       window.location.href = 'index.html';
       return;
     }
-
-    // รอให้ app.js โหลดเสร็จแล้ว override
-    const origLoadAll = typeof loadAllData === 'function' ? loadAllData : null;
 
     window.loadAllData = async function () {
       try {
@@ -69,14 +53,9 @@
         if (savedProfile && typeof userProfiles !== 'undefined') {
           userProfiles[savedUser] = JSON.parse(savedProfile);
         }
-
-        // โหลด users ทั้งหมด (สำหรับทีม)
         try {
           const allUsers = await apiLoadUsers();
           Object.assign(userProfiles || {}, allUsers);
-          if (typeof users !== 'undefined') {
-            Object.keys(allUsers).forEach((u) => { users[u] = users[u] || '***'; });
-          }
         } catch (_) {}
 
         shiftLog = await apiLoadShifts();
@@ -85,18 +64,17 @@
         vehicles = await apiLoadVehicles();
         doctors = await apiLoadDoctors();
         if (typeof canViewMonitoring === 'function' && canViewMonitoring(currentUser)) {
-          stockWithdrawals = await apiLoadStockWithdrawals();
+          try { stockWithdrawals = await apiLoadStockWithdrawals(); } catch (_) { stockWithdrawals = []; }
         }
         stockOffline = false;
         vehicleOffline = false;
         doctorsOffline = false;
       } catch (err) {
-        console.error('[Neon] โหลดข้อมูลล้มเหลว', err);
+        console.error('[Neon]', err);
         if (window.Swal) Swal.fire('เชื่อมต่อฐานข้อมูลไม่ได้', err.message, 'error');
       }
     };
 
-    // Override save functions → no-op (บันทึกผ่าน API แล้ว)
     window.saveShiftLog = () => {};
     window.saveFund = () => {};
     window.saveStockLocal = () => {};
@@ -104,12 +82,11 @@
     window.saveDoctorsLocal = () => {};
     window.saveStockWithdrawalsLocal = () => {};
 
-    // ---------- Check-in / Check-out ----------
     window.handleCheckIn = async function () {
       const btn = document.getElementById('btnCheckIn');
       if (btn) btn.disabled = true;
       try {
-        await apiCheckIn(currentUser);
+        await apiCheckIn();
         shiftLog = await apiLoadShifts();
         if (typeof refreshShiftViews === 'function') refreshShiftViews();
         if (typeof celebrate === 'function') {
@@ -158,7 +135,6 @@
       }
     };
 
-    // ---------- Fund ----------
     window.handleFundTransaction = async function (type) {
       const amountInput = document.getElementById('fundAmountInput');
       const noteInput = document.getElementById('fundNoteInput');
@@ -170,12 +146,7 @@
       const btn = document.getElementById(type === 'deposit' ? 'btnFundDeposit' : 'btnFundWithdraw');
       if (btn) btn.disabled = true;
       try {
-        await apiFundTransaction({
-          username: currentUser,
-          type,
-          amount,
-          note: noteInput?.value.trim() || ''
-        });
+        await apiFundTransaction({ type, amount, note: noteInput?.value.trim() || '' });
         centralFund = await apiLoadFund();
         if (typeof renderCentralFund === 'function') renderCentralFund();
         amountInput.value = '';
@@ -205,20 +176,11 @@
       const btn = document.getElementById(target === 'deposit' ? 'btnFundAddDeposit' : 'btnFundAddReserve');
       if (btn) btn.disabled = true;
       try {
-        await apiFundTransaction({
-          username: currentUser,
-          type: 'admin_add',
-          target,
-          amount,
-          note: noteInput?.value.trim() || ''
-        });
+        await apiFundTransaction({ type: 'admin_add', target, amount, note: noteInput?.value.trim() || '' });
         centralFund = await apiLoadFund();
         if (typeof renderCentralFund === 'function') renderCentralFund();
         amountInput.value = '';
         if (noteInput) noteInput.value = '';
-        if (typeof celebrate === 'function') {
-          celebrate({ particleCount: 70, spread: 65, origin: { y: 0.6 }, colors: ['#fbbf24', '#f59e0b', '#22c55e'] });
-        }
         if (typeof showAlert === 'function') {
           showAlert('เพิ่มเงินสำเร็จ', `เพิ่ม${target === 'deposit' ? 'เงินฝาก' : 'เงินสำรอง'} ${amount.toLocaleString('th-TH')} บาท เรียบร้อย`, 'success');
         }
@@ -229,7 +191,6 @@
       }
     };
 
-    // ---------- Stock ----------
     window.handleAddStock = async function () {
       const nameInput = document.getElementById('stockNameInput');
       const qtyInput = document.getElementById('stockQtyInput');
@@ -246,19 +207,11 @@
       const btn = document.getElementById('btnAddStock');
       if (btn) btn.disabled = true;
       try {
-        await apiAddStock({ name, quantity, minQuantity, source, addedBy: currentUser });
+        await apiAddStock({ name, quantity, minQuantity, source });
         stockItems = await apiLoadStock();
         if (typeof renderStock === 'function') renderStock();
-        nameInput.value = '';
-        qtyInput.value = '';
-        minInput.value = '';
-        sourceInput.value = '';
-        if (typeof celebrate === 'function') {
-          celebrate({ particleCount: 70, spread: 65, origin: { y: 0.6 }, colors: ['#2563eb', '#22c55e', '#fbbf24'] });
-        }
-        if (typeof showAlert === 'function') {
-          showAlert('เพิ่มสต็อกสำเร็จ', `${name} จำนวน ${quantity.toLocaleString('th-TH')} ชิ้น เรียบร้อย`, 'success');
-        }
+        nameInput.value = ''; qtyInput.value = ''; minInput.value = ''; sourceInput.value = '';
+        if (typeof showAlert === 'function') showAlert('เพิ่มสต็อกสำเร็จ', `${name} จำนวน ${quantity.toLocaleString('th-TH')} ชิ้น`, 'success');
       } catch (err) {
         if (typeof showAlert === 'function') showAlert('เพิ่มสต็อกไม่สำเร็จ', err.message, 'error');
       } finally {
@@ -266,10 +219,7 @@
       }
     };
 
-    // เก็บ original promptAdjustStock แล้ว wrap
-    const _origPromptAdjust = typeof promptAdjustStock === 'function' ? promptAdjustStock : null;
     window.promptAdjustStock = async function (id, direction) {
-      // เรียก logic เดิมเพื่อถามจำนวน (Swal) แล้วค่อยยิง API
       const item = stockItems.find((s) => String(s.id) === String(id));
       if (!item) return;
       const isAdd = direction > 0;
@@ -281,12 +231,9 @@
         if (isAdd) {
           const result = await Swal.fire({
             title: `เติมสต็อก "${item.name}"`,
-            input: 'number',
-            inputValue: 1,
+            input: 'number', inputValue: 1,
             inputAttributes: { min: 1, step: 1 },
-            showCancelButton: true,
-            confirmButtonText: 'เติมสต็อก',
-            cancelButtonText: 'ยกเลิก',
+            showCancelButton: true, confirmButtonText: 'เติมสต็อก', cancelButtonText: 'ยกเลิก',
             confirmButtonColor: '#16a34a'
           });
           if (!result.isConfirmed) return;
@@ -294,21 +241,15 @@
         } else {
           const { value: formValues } = await Swal.fire({
             title: `เบิก/ใช้ "${item.name}"`,
-            html:
-              '<input id="swal-qty" type="number" min="1" value="1" class="swal2-input" placeholder="จำนวน">' +
-              '<input id="swal-req" class="swal2-input" placeholder="ชื่อผู้เบิก">' +
-              '<input id="swal-price" type="number" min="0" value="0" class="swal2-input" placeholder="ราคา (ถ้ามี)">',
-            focusConfirm: false,
-            showCancelButton: true,
-            confirmButtonText: 'เบิก',
-            cancelButtonText: 'ยกเลิก',
-            preConfirm: () => {
-              return {
-                qty: Math.floor(Number(document.getElementById('swal-qty').value)) || 1,
-                requester: document.getElementById('swal-req').value.trim(),
-                price: Number(document.getElementById('swal-price').value) || 0
-              };
-            }
+            html: '<input id="swal-qty" type="number" min="1" value="1" class="swal2-input" placeholder="จำนวน">' +
+                  '<input id="swal-req" class="swal2-input" placeholder="ชื่อผู้เบิก">' +
+                  '<input id="swal-price" type="number" min="0" value="0" class="swal2-input" placeholder="ราคา (ถ้ามี)">',
+            focusConfirm: false, showCancelButton: true, confirmButtonText: 'เบิก', cancelButtonText: 'ยกเลิก',
+            preConfirm: () => ({
+              qty: Math.floor(Number(document.getElementById('swal-qty').value)) || 1,
+              requester: document.getElementById('swal-req').value.trim(),
+              price: Number(document.getElementById('swal-price').value) || 0
+            })
           });
           if (!formValues) return;
           amount = formValues.qty;
@@ -323,14 +264,10 @@
 
       const delta = isAdd ? amount : -amount;
       try {
-        await apiAdjustStock(id, delta, {
-          username: currentUser,
-          requester,
-          price
-        });
+        await apiAdjustStock(id, delta, { requester, price });
         stockItems = await apiLoadStock();
         if (typeof canViewMonitoring === 'function' && canViewMonitoring(currentUser)) {
-          stockWithdrawals = await apiLoadStockWithdrawals();
+          try { stockWithdrawals = await apiLoadStockWithdrawals(); } catch (_) {}
         }
         if (typeof renderStock === 'function') renderStock();
         if (typeof showAlert === 'function') {
@@ -343,18 +280,9 @@
 
     window.confirmRemoveStock = async function (id) {
       if (window.Swal) {
-        const r = await Swal.fire({
-          title: 'ลบรายการสต็อก?',
-          text: 'ไม่สามารถกู้คืนได้',
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: 'ลบ',
-          cancelButtonText: 'ยกเลิก',
-          confirmButtonColor: '#dc2626'
-        });
+        const r = await Swal.fire({ title: 'ลบรายการสต็อก?', text: 'ไม่สามารถกู้คืนได้', icon: 'warning', showCancelButton: true, confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc2626' });
         if (!r.isConfirmed) return;
       } else if (!confirm('ลบรายการนี้?')) return;
-
       try {
         await apiDeleteStock(id);
         stockItems = await apiLoadStock();
@@ -365,7 +293,6 @@
       }
     };
 
-    // ---------- Vehicles ----------
     window.handleAddVehicle = async function () {
       const plateInput = document.getElementById('vehiclePlateInput');
       const modelInput = document.getElementById('vehicleModelInput');
@@ -380,7 +307,7 @@
       const btn = document.getElementById('btnAddVehicle');
       if (btn) btn.disabled = true;
       try {
-        await apiAddVehicle({ plate, model, username: currentUser, note });
+        await apiAddVehicle({ plate, model, note });
         vehicles = await apiLoadVehicles();
         if (typeof renderVehicles === 'function') renderVehicles();
         if (plateInput) plateInput.value = '';
@@ -408,7 +335,6 @@
       }
     };
 
-    // ---------- Doctors ----------
     window.handleAddDoctor = async function () {
       if (typeof canManageDoctors === 'function' && !canManageDoctors(currentUser)) {
         if (typeof showAlert === 'function') showAlert('ไม่มีสิทธิ์', 'เฉพาะแอดมินและผู้อำนวยการเท่านั้น', 'warning');
@@ -427,7 +353,7 @@
       const btn = document.getElementById('btnAddDoctor');
       if (btn) btn.disabled = true;
       try {
-        await apiAddDoctor({ name, role, note, addedBy: currentUser });
+        await apiAddDoctor({ name, role, note });
         doctors = await apiLoadDoctors();
         if (typeof renderDoctors === 'function') renderDoctors();
         if (nameInput) nameInput.value = '';
@@ -455,38 +381,29 @@
       }
     };
 
-    // Logout ล้าง session
-    const logoutBtn = document.getElementById('btnLogout');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', () => {
+    document.getElementById('btnLogout')?.addEventListener('click', () => {
+      if (typeof clearSession === 'function') clearSession();
+      else {
         sessionStorage.removeItem('medicUser');
         sessionStorage.removeItem('medicProfile');
-      }, true);
-    }
+        sessionStorage.removeItem('medicToken');
+      }
+    }, true);
 
-    // เรียกโหลดข้อมูลเมื่อพร้อม
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-          if (typeof loadAllData === 'function') loadAllData().then(() => {
+    const boot = () => {
+      setTimeout(() => {
+        if (typeof loadAllData === 'function') {
+          loadAllData().then(() => {
             if (typeof refreshShiftViews === 'function') refreshShiftViews();
             if (typeof renderCentralFund === 'function') renderCentralFund();
             if (typeof renderStock === 'function') renderStock();
             if (typeof renderVehicles === 'function') renderVehicles();
             if (typeof renderDoctors === 'function') renderDoctors();
           });
-        }, 100);
-      });
-    } else {
-      setTimeout(() => {
-        if (typeof loadAllData === 'function') loadAllData().then(() => {
-          if (typeof refreshShiftViews === 'function') refreshShiftViews();
-          if (typeof renderCentralFund === 'function') renderCentralFund();
-          if (typeof renderStock === 'function') renderStock();
-          if (typeof renderVehicles === 'function') renderVehicles();
-          if (typeof renderDoctors === 'function') renderDoctors();
-        });
+        }
       }, 100);
-    }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+    else boot();
   }
 })();
