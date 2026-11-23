@@ -146,6 +146,20 @@ async function logSecurityEvent({ eventType, username, fingerprint, ip, detail }
 }
 
 
+function formatShiftDuration(startIso, endDate = new Date()) {
+  const start = new Date(startIso);
+  let totalSec = Math.max(0, Math.floor((endDate - start) / 1000));
+  const hours = Math.floor(totalSec / 3600);
+  totalSec %= 3600;
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  const parts = [];
+  if (hours > 0) parts.push(`${hours} ชม.`);
+  if (minutes > 0 || hours > 0) parts.push(`${minutes} นาที`);
+  parts.push(`${seconds} วินาที`);
+  return parts.join(' ');
+}
+
 async function notifyDiscordShift({ type, username, displayName, role, date, time, duration, isForced }) {
   if (!DISCORD_WEBHOOK_URL) return;
   const isIn = type === 'เข้าเวร';
@@ -158,7 +172,6 @@ async function notifyDiscordShift({ type, username, displayName, role, date, tim
     { name: 'เวลา', value: time || '-', inline: true }
   ];
   if (!isIn && duration) fields.push({ name: 'ระยะเวลา', value: duration, inline: true });
-  if (DISCORD_GUILD_ID) fields.push({ name: 'Server ID', value: DISCORD_GUILD_ID, inline: true });
 
   const body = {
     username: 'Medic Shift Bot',
@@ -397,10 +410,7 @@ app.post('/api/shift-checkout', authRequired, async (req, res) => {
     `;
     if (!openRows.length) return res.status(400).json({ error: 'ไม่พบเวรที่ค้างอยู่' });
     const open = openRows[0];
-    const diffMin = Math.max(0, Math.floor((t.now - new Date(open.datetime)) / 60000));
-    const hours = Math.floor(diffMin / 60);
-    const minutes = diffMin % 60;
-    const duration = hours > 0 ? `${hours} ชม. ${minutes} นาที` : `${minutes} นาที`;
+    const duration = formatShiftDuration(open.datetime, t.now);
     await sql`UPDATE shift_logs SET duration = ${duration} WHERE id = ${open.id}`;
     const inserted = await sql`
       INSERT INTO shift_logs (username, type, date_th, time_th, duration, is_forced)

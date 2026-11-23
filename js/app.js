@@ -63,10 +63,16 @@ function thaiNow() {
 }
 
 function calcDuration(checkinDatetime, now) {
-    const diffMin = Math.max(0, Math.floor((now - new Date(checkinDatetime)) / 60000));
-    const hours = Math.floor(diffMin / 60);
-    const minutes = diffMin % 60;
-    return hours > 0 ? `${hours} ชม. ${minutes} นาที` : `${minutes} นาที`;
+    let totalSec = Math.max(0, Math.floor((now - new Date(checkinDatetime)) / 1000));
+    const hours = Math.floor(totalSec / 3600);
+    totalSec %= 3600;
+    const minutes = Math.floor(totalSec / 60);
+    const seconds = totalSec % 60;
+    const parts = [];
+    if (hours > 0) parts.push(`${hours} ชม.`);
+    if (minutes > 0 || hours > 0) parts.push(`${minutes} นาที`);
+    parts.push(`${seconds} วินาที`);
+    return parts.join(' ');
 }
 
 function loadJSON(key, fallback) {
