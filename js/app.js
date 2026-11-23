@@ -924,23 +924,83 @@ async function confirmRemoveVehicle(id) {
 
 // ============================================================
 // DOCTORS — แสดงรายชื่อจาก users ใน Neon เท่านั้น (อ่านอย่างเดียว)
-// จัดเรียงตามตำแหน่ง (ลำดับชั้น) แล้วตามสถานะเข้าเวร แล้วตามชื่อ
+// จัดกลุ่ม/เรียงตามลำดับตำแหน่งแบบหน้าเว็บ MEDIC LIGHT CITY (รายชื่อแพทย์)
+// https://sites.google.com/bic.ac.th/mediclightcity/รายชื่อแพทย์
 // ============================================================
+// ลำดับตำแหน่ง + ปลอกแขน ตามเว็บไซต์ทางการ
+const ROLE_HIERARCHY = [
+    { rank: 1, keys: ['แอดมินแพทย์', 'แอดมิน', 'admin'],           label: 'แอดมินแพทย์',           armband: null,        armbandLabel: null },
+    { rank: 2, keys: ['ผู้อำนวยการแพทย์', 'ผู้อำนวยการ'],         label: 'ผู้อำนวยการแพทย์',     armband: 'rainbow',  armbandLabel: 'ปลอกแขนสี รุ้ง' },
+    { rank: 3, keys: ['รองผู้อำนวยการแพทย์', 'รอง.ผู้อำนวยการ', 'รองผู้อำนวยการ', 'รอง.ผอ', 'รองผอ'], label: 'รองผู้อำนวยการแพทย์', armband: 'rainbow', armbandLabel: 'ปลอกแขนสี รุ้ง' },
+    { rank: 4, keys: ['ส่วนกลาง'],                               label: 'ส่วนกลาง',             armband: 'black',    armbandLabel: 'ปลอกแขนสี ดำ' },
+    { rank: 5, keys: ['แพทย์ชำนาญการ', 'ชำนาญการ'],               label: 'แพทย์ชำนาญการ',       armband: 'white',    armbandLabel: 'ปลอกแขนสี ขาว' },
+    { rank: 6, keys: ['แพทย์', 'หมอ', 'doctor'],                  label: 'แพทย์',                 armband: 'red',      armbandLabel: 'ปลอกแขนสี แดง' },
+    { rank: 7, keys: ['นักเรียนแพทย์', 'นักเรียน'],               label: 'นักเรียนแพทย์',       armband: 'blue',     armbandLabel: 'ปลอกแขนสี ฟ้า' },
+    { rank: 8, keys: ['พยาบาล', 'nurse'],                         label: 'พยาบาล',               armband: null,        armbandLabel: null },
+    { rank: 9, keys: ['ผู้ช่วย', 'assistant'],                    label: 'ผู้ช่วย',               armband: null,        armbandLabel: null }
+];
+
+function normalizeRoleText(role) {
+    return String(role || '').toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
+}
+
+function getRoleMeta(role) {
+    const raw = String(role || '').trim();
+    const n = normalizeRoleText(raw);
+    // ตรวจจากเฉพาะเจาะจง → กว้าง (เรียง keys ยาวก่อนภายในแต่ละ rank อยู่แล้ว)
+    for (const entry of ROLE_HIERARCHY) {
+        for (const key of entry.keys) {
+            const nk = normalizeRoleText(key);
+            if (!nk) continue;
+            // แอดมิน / ส่วนกลาง / ชำนาญการ / นักเรียน — match ตรงๆ
+            if (entry.rank === 1 || entry.rank === 4 || entry.rank === 5 || entry.rank === 7) {
+                if (n.includes(nk) || nk.includes(n)) return entry;
+            }
+            // ผู้อำนวยการ (ไม่ใช่รอง)
+            if (entry.rank === 2) {
+                if (n.includes('ผู้อำนวยการ') && !n.includes('รอง')) return entry;
+            }
+            // รองผู้อำนวยการ
+            if (entry.rank === 3) {
+                if (n.includes('รอง') && (n.includes('ผู้อำนวยการ') || n.includes('ผอ'))) return entry;
+            }
+            // แพทย์ ทั่วไป — ต้องไม่ใช่ตำแหน่งอื่นที่มีคำว่าแพทย์
+            if (entry.rank === 6) {
+                if ((n.includes('แพทย์') || n.includes('หมอ') || n === 'doctor') &&
+                    !n.includes('แอดมิน') && !n.includes('ผู้อำนวยการ') && !n.includes('ชำนาญ') &&
+                    !n.includes('นักเรียน') && !n.includes('ส่วนกลาง')) {
+                    return entry;
+                }
+            }
+            if (entry.rank >= 8 && n.includes(nk)) return entry;
+        }
+    }
+    return { rank: 90, keys: [], label: raw || 'อื่นๆ', armband: null, armbandLabel: null };
+}
+
 function getRoleRank(role) {
-    const r = String(role || '').toLowerCase().replace(/\s+/g, '');
-    if (r.includes('ผู้อำนวยการ') && !r.includes('รอง')) return 1; // ผู้อำนวยการแพทย์
-    if (r.includes('รอง') && (r.includes('ผู้อำนวยการ') || r.includes('ผอ'))) return 2; // รอง.ผู้อำนวยการ
-    if (r.includes('หัวหน้า')) return 3;
-    if (r.includes('แพทย์') || r.includes('หมอ') || r.includes('doctor')) return 4;
-    if (r.includes('พยาบาล') || r.includes('nurse')) return 5;
-    if (r.includes('ผู้ช่วย') || r.includes('assistant')) return 6;
-    return 90; // อื่นๆ
+    return getRoleMeta(role).rank;
+}
+
+function armbandDotHtml(armband) {
+    if (!armband) return '';
+    const colors = {
+        rainbow: 'linear-gradient(90deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)',
+        black: '#1a1a1a',
+        white: '#f5f5f5',
+        red: '#e53935',
+        blue: '#42a5f5'
+    };
+    const bg = colors[armband] || '#888';
+    const border = armband === 'white' ? '1px solid rgba(0,0,0,0.25)' : '1px solid rgba(255,255,255,0.2)';
+    return `<span class="armband-dot" title="${armband}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${bg};border:${border};vertical-align:middle;margin-right:6px;"></span>`;
 }
 
 function syncDoctorsFromUsers() {
     const profiles = (typeof userProfiles === 'object' && userProfiles) ? userProfiles : {};
     doctors = Object.entries(profiles).map(([username, u], i) => {
         const onDuty = typeof getOpenCheckIn === 'function' ? Boolean(getOpenCheckIn(username)) : false;
+        const meta = getRoleMeta(u?.role);
         return {
             id: username || i,
             name: u?.name || username,
@@ -948,14 +1008,17 @@ function syncDoctorsFromUsers() {
             note: u?.desc || '',
             username,
             onDuty,
-            roleRank: getRoleRank(u?.role)
+            roleRank: meta.rank,
+            roleLabel: meta.label,
+            armband: meta.armband,
+            armbandLabel: meta.armbandLabel
         };
     }).sort((a, b) => {
-        // 1) ตำแหน่ง (ลำดับชั้น)
+        // 1) ตำแหน่งตามลำดับเว็บไซต์
         if (a.roleRank !== b.roleRank) return a.roleRank - b.roleRank;
         // 2) สถานะเข้าเวร (อยู่ในเวรก่อน)
         if (a.onDuty !== b.onDuty) return a.onDuty ? -1 : 1;
-        // 3) ชื่อ (ไทย)
+        // 3) ชื่อ
         return String(a.name).localeCompare(String(b.name), 'th');
     });
 }
@@ -991,27 +1054,37 @@ function renderDoctors() {
         if (!doctors.length) {
             list.innerHTML = '<div class="log-item"><strong>ยังไม่มีสมาชิกในระบบ</strong><span>เมื่อมีคนสมัครหรือมีบัญชีใน Neon จะแสดงที่นี่</span></div>';
         } else {
-            // จัดกลุ่มตามตำแหน่ง เพื่อให้อ่านง่าย
+            // จัดกลุ่มตามลำดับตำแหน่งแบบเว็บไซต์ (ใช้ roleLabel + rank)
             const groups = [];
-            let currentRole = null;
+            let currentKey = null;
             let currentGroup = null;
             doctors.forEach((d) => {
-                const roleKey = d.role || '-';
-                if (roleKey !== currentRole) {
-                    currentRole = roleKey;
-                    currentGroup = { role: roleKey, items: [] };
+                const key = `${d.roleRank}|${d.roleLabel}`;
+                if (key !== currentKey) {
+                    currentKey = key;
+                    currentGroup = {
+                        label: d.roleLabel,
+                        armband: d.armband,
+                        armbandLabel: d.armbandLabel,
+                        items: []
+                    };
                     groups.push(currentGroup);
                 }
                 currentGroup.items.push(d);
             });
-            list.innerHTML = groups.map((g) => `
-                <div class="doctors-group" style="margin-bottom:14px;">
-                    <div class="doctors-group-title" style="font-size:0.8rem;font-weight:600;opacity:0.75;margin:8px 0 6px;padding-left:2px;">
-                        ${escapeHtml(g.role)} · ${g.items.length} คน
+            list.innerHTML = groups.map((g) => {
+                const band = g.armbandLabel
+                    ? `<span style="opacity:0.85;font-weight:500;"> · ${armbandDotHtml(g.armband)}${escapeHtml(g.armbandLabel)}</span>`
+                    : '';
+                return `
+                <div class="doctors-group" style="margin-bottom:18px;">
+                    <div class="doctors-group-title" style="font-size:0.95rem;font-weight:700;margin:10px 0 8px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border-left:3px solid rgba(77,150,255,0.7);">
+                        ${escapeHtml(g.label)}${band}
+                        <span style="opacity:0.65;font-weight:500;font-size:0.8rem;margin-left:6px;">(${g.items.length} คน)</span>
                     </div>
                     ${g.items.map((d) => doctorItemHtml(d)).join('')}
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
         staggerChildren(list);
     }
