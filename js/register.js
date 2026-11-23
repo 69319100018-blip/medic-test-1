@@ -1,6 +1,38 @@
 (function () {
   'use strict';
 
+  // เล่นวิดีโอพื้นหลังบนหน้าสมัคร
+  const video = document.getElementById('bgVideo');
+  const bgImage = document.getElementById('loginBgImage');
+  if (video) {
+    video.style.display = '';
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    const tryPlay = () => video.play().then(() => {
+      if (bgImage) bgImage.classList.add('is-hidden');
+    }).catch(() => {});
+    tryPlay();
+    video.addEventListener('playing', () => {
+      if (bgImage) bgImage.classList.add('is-hidden');
+    });
+    document.addEventListener('click', tryPlay, { once: true });
+  }
+
+
+  // บังคับแสดงฟอร์มสมัครทันที (ไม่พึ่ง mouse-proximity ของหน้า login)
+  document.documentElement.style.setProperty('--focus', '1');
+  const page = document.getElementById('loginPage');
+  if (page) page.style.setProperty('--focus', '1');
+  const card = document.getElementById('loginCard');
+  if (card) {
+    card.classList.remove('is-faded');
+    card.style.opacity = '1';
+    card.style.filter = 'none';
+    card.style.transform = 'none';
+    card.style.pointerEvents = 'auto';
+  }
+
   const yearEl = document.getElementById('year');
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
@@ -30,6 +62,9 @@
 
     if (btn) btn.disabled = true;
     try {
+      if (typeof apiRegister !== 'function') {
+        throw new Error('ไม่พบ apiRegister — ตรวจว่าโหลด js/api-client.js แล้ว');
+      }
       await apiRegister({ username, displayName, password });
       if (window.Swal) {
         await Swal.fire({

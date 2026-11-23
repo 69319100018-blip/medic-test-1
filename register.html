@@ -27,8 +27,9 @@
 </head>
 <body class="login-body register-body">
     <!-- พื้นหลังรูป + วิดีโอ (สำรอง) -->
-    <div class="login-bg-image" style="background-image:url('assets/images/bg-fivem.png')"></div>
-    <video id="bgVideo" class="login-bg-video" autoplay muted playsinline preload="auto" src="assets/videos/bg1-h264.mp4" style="display:none"></video>
+    <!-- รูปสำรอง ถ้าวิดีโอยังโหลดไม่ทัน -->
+    <div class="login-bg-image" id="loginBgImage" style="background-image:url('assets/images/bg-fivem.png')"></div>
+    <video id="bgVideo" class="login-bg-video" autoplay muted loop playsinline preload="auto" src="assets/videos/bg1-h264.mp4"></video>
     <div class="login-overlay"></div>
     <div class="login-grid"></div>
     <div class="scanline"></div>

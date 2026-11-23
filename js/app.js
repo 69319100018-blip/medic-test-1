@@ -1497,6 +1497,7 @@ function initLoginVideo() {
     function loadAndPlay(i) {
         index = ((i % playlist.length) + playlist.length) % playlist.length;
         try { localStorage.setItem(STORAGE_KEY, String(index)); } catch (_) {}
+        video.style.display = '';
         video.src = playlist[index];
         video.load();
         updatePickUI();
@@ -1505,6 +1506,17 @@ function initLoginVideo() {
             if (p && p.catch) p.catch(() => {});
         }
     }
+
+    const bgImage = document.getElementById('loginBgImage');
+    function hidePoster() {
+        if (bgImage) bgImage.classList.add('is-hidden');
+        video.style.display = '';
+    }
+    function showPoster() {
+        if (bgImage) bgImage.classList.remove('is-hidden');
+    }
+    video.addEventListener('playing', hidePoster);
+    video.addEventListener('error', showPoster);
 
     function togglePlay() {
         if (video.paused) {

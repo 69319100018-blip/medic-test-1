@@ -1795,8 +1795,26 @@ body.has-bg .card-form {
 }
 
 /* วิดีโอพื้นหลัง */
+.login-bg-image {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-position: center center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    transform: scale(1.02);
+    filter: saturate(1.05) contrast(1.05);
+    pointer-events: none;
+}
+
+.login-bg-image.is-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease;
+}
+
 .login-bg-video {
-    position: absolute;
+    position: fixed;
     inset: 0;
     width: 100%;
     height: 100%;
@@ -1804,7 +1822,7 @@ body.has-bg .card-form {
     object-position: center center;
     z-index: 0;
     pointer-events: none;
-    background: #020617;
+    background: transparent;
     filter: saturate(calc(1 + (1 - var(--focus)) * 0.3))
             contrast(calc(1 + (1 - var(--focus)) * 0.15))
             brightness(calc(0.70 + (1 - var(--focus)) * 0.65));
