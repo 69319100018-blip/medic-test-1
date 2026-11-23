@@ -1,7 +1,9 @@
-# Medic Shift Log — โหมดเก็บข้อมูลในเครื่อง (localStorage)
+# Medic Shift Log
 
-เวอร์ชันนี้ **ไม่ใช้ฐานข้อมูล Neon / ไม่มี API**
-ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของเครื่องที่เปิดใช้งาน (localStorage)
+มี 2 โหมด:
+
+1. **localStorage** (เดิม) — เปิดไฟล์ HTML ตรง ๆ ได้เลย ข้อมูลอยู่แค่เครื่องนั้น
+2. **Neon Database** (ใหม่) — ข้อมูลกลาง ทุกคนเห็นร่วมกัน → ดูรายละเอียดใน **README-Neon.md**
 
 ---
 
@@ -9,38 +11,35 @@
 
 ```
 kimi/
-├── index.html              ← หน้าเข้าสู่ระบบ
-├── dashboard.html          ← หน้าแดชบอร์ด
-├── css/
-│   └── style.css
+├── schema.sql              ← SQL สร้างตารางใน Neon
+├── README-Neon.md          ← คู่มือเชื่อม Neon (อ่านไฟล์นี้)
+├── index.html
+├── dashboard.html
+├── css/style.css
 ├── js/
-│   └── app.js              ← เก็บ/อ่านข้อมูลจาก localStorage
+│   ├── app.js              ← logic หลัก
+│   ├── api-client.js       ← เรียก API
+│   └── neon-bridge.js      ← เชื่อม app.js กับ Neon
+├── api/
+│   ├── package.json
+│   ├── server.js
+│   └── .env                ← ใส่ DATABASE_URL
 └── assets/
-    ├── images/
-    └── videos/
 ```
 
-## วิธีใช้งาน
+## บัญชีทดสอบ
 
-1. เปิด `index.html` ด้วยเบราว์เซอร์ (หรืออัปโหลดทั้งโฟลเดอร์ขึ้นโฮสติ้ง static ก็ได้)
-2. ล็อกอินด้วยบัญชีที่มีในระบบ
-3. ข้อมูลเวร / เงินกองกลาง / สต็อก / รถ / รายชื่อแพทย์ จะถูกบันทึกในเครื่องอัตโนมัติ
+| Username           | Password |
+|--------------------|----------|
+| talos blackagency  | 001      |
+| noelle blackagency | 002      |
+| jane doe           | 003      |
 
-## บัญชีทดสอบ (ตัวอย่างในโค้ด)
+## เริ่มใช้กับ Neon (สรุปสั้น)
 
-| Username | Password |
-|----------|----------|
-| talos blackagency | 001 |
-| noelle blackagency | 002 |
-| jane doe | 003 |
+1. รัน `schema.sql` ใน Neon SQL Editor
+2. แก้ `api/.env` ใส่ `DATABASE_URL`
+3. `cd api && npm install && npm start`
+4. เปิด http://localhost:3000/index.html
 
-## สิ่งที่ควรรู้
-
-- ข้อมูลอยู่ **เฉพาะเบราว์เซอร์นั้น** — เปลี่ยนเครื่อง/ล้างข้อมูลเว็บ แล้วข้อมูลหาย
-- ไม่มีการซิงก์ข้ามเครื่อง
-- ไม่ต้องตั้งค่า Environment Variables / DATABASE_URL / Discord Webhook
-- เหมาะสำหรับใช้งานคนเดียวต่อเครื่อง หรือทดสอบ UI
-
-## ถ้าอยากกลับไปใช้ฐานข้อมูลกลางในอนาคต
-
-ต้องเพิ่มโฟลเดอร์ `api/` + `package.json` + `schema.sql` และเชื่อม Neon / Vercel ใหม่
+รายละเอียดเต็ม → เปิดไฟล์ **README-Neon.md**

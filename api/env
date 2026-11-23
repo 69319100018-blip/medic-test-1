@@ -1,0 +1,3 @@
+# ใส่ connection string จริงของคุณที่นี่ (แนะนำ pooled)
+DATABASE_URL=postgresql://neondb_owner:npg_IVbBaXrE43nc@ep-gentle-dust-bbuefr44-pooler.c-15.us-east-1.aws.neon.tech/neondb?sslmode=require
+PORT=3000

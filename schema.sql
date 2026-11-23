@@ -1,0 +1,123 @@
+-- ============================================================
+-- Medic Shift Log — Neon PostgreSQL Schema
+-- รันไฟล์นี้ครั้งเดียวใน Neon SQL Editor
+-- ============================================================
+
+-- ผู้ใช้ระบบ (login)
+CREATE TABLE IF NOT EXISTS users (
+    username        TEXT PRIMARY KEY,
+    password_hash   TEXT NOT NULL,          -- เก็บ plain ชั่วคราว (โปรดเปลี่ยนเป็น bcrypt ภายหลัง)
+    display_name    TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'พยาบาล',
+    avatar          TEXT,
+    is_admin        BOOLEAN NOT NULL DEFAULT false,
+    can_view_monitoring BOOLEAN NOT NULL DEFAULT false,
+    description     TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- บันทึกเข้า-ออกเวร
+CREATE TABLE IF NOT EXISTS shift_logs (
+    id              BIGSERIAL PRIMARY KEY,
+    username        TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+    type            TEXT NOT NULL CHECK (type IN ('เข้าเวร', 'ออกเวร')),
+    datetime        TIMESTAMPTZ,            -- ใช้กับเข้าเวร
+    date_th         TEXT,
+    time_th         TEXT,
+    duration        TEXT,                   -- ใช้กับออกเวร
+    is_forced       BOOLEAN DEFAULT false,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shift_logs_username_date ON shift_logs (username, created_at DESC);
+
+-- เงินกองกลาง (เก็บสถานะล่าสุดเป็นแถวเดียว)
+CREATE TABLE IF NOT EXISTS central_fund (
+    id              INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    balance         NUMERIC(14,2) NOT NULL DEFAULT 70000,
+    cash            NUMERIC(14,2) NOT NULL DEFAULT 40000,
+    deposit         NUMERIC(14,2) NOT NULL DEFAULT 20000,
+    reserve         NUMERIC(14,2) NOT NULL DEFAULT 10000,
+    total_income    NUMERIC(14,2) NOT NULL DEFAULT 0,
+    total_expense   NUMERIC(14,2) NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ประวัติฝาก/ถอน/เพิ่มเงิน
+CREATE TABLE IF NOT EXISTS fund_history (
+    id              BIGSERIAL PRIMARY KEY,
+    username        TEXT,
+    type            TEXT NOT NULL,          -- ฝาก, ถอน, เพิ่มเงินฝาก, เพิ่มเงินสำรอง
+    amount          NUMERIC(14,2) NOT NULL,
+    note            TEXT,
+    date_th         TEXT,
+    time_th         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- สต็อกอุปกรณ์
+CREATE TABLE IF NOT EXISTS stock_items (
+    id              BIGSERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    quantity        INT NOT NULL DEFAULT 0,
+    min_quantity    INT NOT NULL DEFAULT 0,
+    source          TEXT,
+    added_by        TEXT,
+    manual_status   TEXT DEFAULT 'auto',
+    date_th         TEXT,
+    time_th         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ประวัติการเบิก/เติมสต็อก
+CREATE TABLE IF NOT EXISTS stock_withdrawals (
+    id              BIGSERIAL PRIMARY KEY,
+    stock_id        BIGINT REFERENCES stock_items(id) ON DELETE SET NULL,
+    stock_name      TEXT,
+    username        TEXT,                   -- คนที่ทำรายการ
+    requester       TEXT,                   -- ผู้เบิก (ถ้าเบิก)
+    quantity        INT NOT NULL,
+    is_add          BOOLEAN NOT NULL DEFAULT false,
+    price           NUMERIC(12,2) DEFAULT 0,
+    note            TEXT,
+    date_th         TEXT,
+    time_th         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ทะเบียนรถ
+CREATE TABLE IF NOT EXISTS vehicles (
+    id              BIGSERIAL PRIMARY KEY,
+    plate           TEXT NOT NULL,
+    model           TEXT,
+    username        TEXT,                   -- เจ้าของ
+    note            TEXT,
+    date_th         TEXT,
+    time_th         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- รายชื่อแพทย์
+CREATE TABLE IF NOT EXISTS doctors (
+    id              BIGSERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    role            TEXT,
+    note            TEXT,
+    added_by        TEXT,
+    date_th         TEXT,
+    time_th         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ข้อมูลเริ่มต้น
+INSERT INTO central_fund (id, balance, cash, deposit, reserve)
+VALUES (1, 70000, 40000, 20000, 10000)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO users (username, password_hash, display_name, role, avatar, is_admin, can_view_monitoring, description)
+VALUES
+    ('talos blackagency', '001', 'Talos Blackagency', 'ผู้อำนวยการแพทย์', 'assets/images/talos.jpg', true,  true,  'ควบคุมและตรวจสอบทีมเวร'),
+    ('noelle blackagency', '002', 'Noelle Blackagency', 'รอง.ผู้อำนวยการ', 'assets/images/noeele.jpg', false, false, 'สนับสนุนงานประสานงาน'),
+    ('jane doe', '003', 'Jane Doe', 'พยาบาล', 'assets/images/jane.jpg', false, false, 'ดูแลผู้ป่วย')
+ON CONFLICT (username) DO NOTHING;
