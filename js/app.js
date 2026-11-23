@@ -1210,25 +1210,46 @@ function highlightActiveAvatarPreset(currentSrc) {
     });
 }
 
-function openAvatarPicker() {
+function openAvatarPicker(opts = {}) {
     const panel = document.getElementById('avatarPickerPanel');
-    if (!panel) return;
+    if (!panel) {
+        const input = document.getElementById('avatarFileInput');
+        if (input) input.click();
+        else if (typeof showAlert === 'function') {
+            showAlert('ไม่พบแผงเปลี่ยนรูป', 'รีเฟรชหน้าเว็บแล้วลองใหม่', 'warning');
+        }
+        return;
+    }
     panel.classList.remove('hidden');
+    panel.style.display = 'block';
+    panel.hidden = false;
+
     const grid = document.getElementById('avatarPresetGrid');
-    if (grid && !grid.dataset.ready) {
-        grid.dataset.ready = '1';
+    if (grid) {
         grid.innerHTML = AVATAR_PRESETS.map((src) =>
-            `<img class="avatar-preset-item" src="${src}" data-src="${src}" alt="preset" title="เลือกรูปนี้">`
+            `<img class="avatar-preset-item" src="${src}" data-src="${src}" alt="preset" title="เลือกรูปนี้" role="button">`
         ).join('');
         grid.querySelectorAll('.avatar-preset-item').forEach((img) => {
             img.addEventListener('click', () => saveUserAvatar(img.getAttribute('data-src')));
         });
     }
     highlightActiveAvatarPreset(userProfiles[currentUser]?.avatar);
+
+    try {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (_e) { /* ignore */ }
+
+    if (opts.openFile) {
+        const input = document.getElementById('avatarFileInput');
+        if (input) setTimeout(() => input.click(), 80);
+    }
 }
 
 function closeAvatarPicker() {
-    document.getElementById('avatarPickerPanel')?.classList.add('hidden');
+    const panel = document.getElementById('avatarPickerPanel');
+    if (!panel) return;
+    panel.classList.add('hidden');
+    panel.style.display = '';
 }
 
 function resizeImageToDataUrl(file, maxSize = 320, quality = 0.82) {
@@ -1317,25 +1338,48 @@ async function handleAvatarFileChange(event) {
 }
 
 function setupAvatarPicker() {
-    if (window.__avatarPickerBound) return;
-    window.__avatarPickerBound = true;
-    document.getElementById('btnEditAvatar')?.addEventListener('click', openAvatarPicker);
-    document.getElementById('btnChangeAvatar')?.addEventListener('click', openAvatarPicker);
-    document.getElementById('btnCloseAvatarPicker')?.addEventListener('click', closeAvatarPicker);
-    document.getElementById('avatarFileInput')?.addEventListener('change', handleAvatarFileChange);
-    document.getElementById('btnResetAvatar')?.addEventListener('click', () => {
-        const fallback = AVATAR_PRESETS[0] || 'assets/images/IMG_4433.jpg';
-        saveUserAvatar(fallback);
-    });
-    // โหลด avatar จาก local ถ้าไม่มีใน profile
+    // ใช้ event delegation — ผูกครั้งเดียวบน document แน่นอนว่ากดแล้วทำงาน
+    if (!window.__avatarPickerDelegated) {
+        window.__avatarPickerDelegated = true;
+        document.addEventListener('click', (e) => {
+            const t = e.target;
+            if (!t || !t.closest) return;
+            if (t.closest('#btnEditAvatar') || t.closest('#btnChangeAvatar')) {
+                e.preventDefault();
+                e.stopPropagation();
+                openAvatarPicker();
+                return;
+            }
+            if (t.closest('#btnCloseAvatarPicker')) {
+                e.preventDefault();
+                closeAvatarPicker();
+                return;
+            }
+            if (t.closest('#btnResetAvatar')) {
+                e.preventDefault();
+                const fallback = AVATAR_PRESETS[0] || 'assets/images/IMG_4433.jpg';
+                saveUserAvatar(fallback);
+                return;
+            }
+            if (t.closest('#btnUploadAvatar')) {
+                e.preventDefault();
+                const input = document.getElementById('avatarFileInput');
+                if (input) input.click();
+                return;
+            }
+        });
+    }
+
+    const fileInput = document.getElementById('avatarFileInput');
+    if (fileInput && !fileInput.dataset.bound) {
+        fileInput.dataset.bound = '1';
+        fileInput.addEventListener('change', handleAvatarFileChange);
+    }
+
+    // โหลด avatar จาก local (โหมด offline)
     try {
         const localAv = localStorage.getItem('medicAvatar_' + currentUser);
-        if (localAv && userProfiles[currentUser] && !String(userProfiles[currentUser].avatar || '').startsWith('data:')) {
-            if (!userProfiles[currentUser].avatar || userProfiles[currentUser].avatar.includes('assets/')) {
-                // ไม่ทับถ้ามี path จากเซิร์ฟเวอร์อยู่แล้ว — ใช้ local เฉพาะเมื่อเคยอัปโหลด
-            }
-        }
-        if (localAv && userProfiles[currentUser] && (!userProfiles[currentUser].avatar || sessionStorage.getItem('medicToken') === null)) {
+        if (localAv && userProfiles[currentUser] && (!userProfiles[currentUser].avatar || !sessionStorage.getItem('medicToken'))) {
             userProfiles[currentUser].avatar = localAv;
         }
     } catch (_e) { /* ignore */ }
@@ -1606,6 +1650,7 @@ function bindDashboardEvents() {
     });
     document.querySelectorAll('.nav-link').forEach((link) => link.addEventListener('click', handleMenuSwitch));
     document.querySelectorAll('.tab-btn').forEach((tab) => tab.addEventListener('click', handleTabSwitch));
+    setupAvatarPicker();
 }
 
 async function initDashboard() {
