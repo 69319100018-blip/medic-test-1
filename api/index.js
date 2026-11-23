@@ -267,7 +267,7 @@ app.post('/api/register', loginLimiter, async (req, res) => {
         ${uname},
         ${hash},
         ${name},
-        ${'แพทย์ (รอปรับ role)'},
+        ${'นักเรียนแพทย์'},
         ${'assets/images/123.jpg'},
         ${false},
         ${false},

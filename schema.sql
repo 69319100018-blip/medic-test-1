@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     username        TEXT PRIMARY KEY,
     password_hash   TEXT NOT NULL,          -- เก็บ plain ชั่วคราว (โปรดเปลี่ยนเป็น bcrypt ภายหลัง)
     display_name    TEXT NOT NULL,
-    role            TEXT NOT NULL DEFAULT 'พยาบาล',
+    role            TEXT NOT NULL DEFAULT 'นักเรียนแพทย์',
     avatar          TEXT,
     is_admin        BOOLEAN NOT NULL DEFAULT false,
     can_view_monitoring BOOLEAN NOT NULL DEFAULT false,
@@ -118,9 +118,14 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO users (username, password_hash, display_name, role, avatar, is_admin, can_view_monitoring, description)
 VALUES
     ('talos blackagency', '$2b$10$b14My6yUItAL/vZZTonZA.GNqvWA13bQDa65QcJWo4cN66orSMoGu', 'Talos Blackagency', 'ผู้อำนวยการแพทย์', 'assets/images/talos.jpg', true,  true,  'ควบคุมและตรวจสอบทีมเวร'),
-    ('noelle blackagency', '$2b$10$NN3DqBFZuViWUDuG8UXh6uKn.xPPqo6ke089NVOBLhhWUTG3Wc9rO', 'Noelle Blackagency', 'รอง.ผู้อำนวยการ', 'assets/images/noeele.jpg', false, false, 'สนับสนุนงานประสานงาน'),
-    ('jane doe', '$2b$10$h/UOy9QcG/qn29OZD0/gEOWRqleDGEkBGX9U2iXzYbxqwLTKvo7Se', 'Jane Doe', 'พยาบาล', 'assets/images/jane.jpg', false, false, 'ดูแลผู้ป่วย')
+    ('noelle blackagency', '$2b$10$NN3DqBFZuViWUDuG8UXh6uKn.xPPqo6ke089NVOBLhhWUTG3Wc9rO', 'Noelle Blackagency', 'รองผู้อำนวยการแพทย์', 'assets/images/noeele.jpg', false, false, 'สนับสนุนงานประสานงาน'),
+    ('jane doe', '$2b$10$h/UOy9QcG/qn29OZD0/gEOWRqleDGEkBGX9U2iXzYbxqwLTKvo7Se', 'Jane Doe', 'นักเรียนแพทย์', 'assets/images/jane.jpg', false, false, 'ดูแลผู้ป่วย')
 ON CONFLICT (username) DO NOTHING;
+
+-- อัปเดตชื่อตำแหน่งเก่าให้ตรงกับหน้าเว็บรายชื่อแพทย์ (รันได้ซ้ำ)
+UPDATE users SET role = 'รองผู้อำนวยการแพทย์' WHERE role IN ('รอง.ผู้อำนวยการ', 'รอง. ผู้อำนวยการ', 'รองผู้อำนวยการ');
+UPDATE users SET role = 'นักเรียนแพทย์' WHERE role IN ('พยาบาล', 'แพทย์ (รอปรับ role)', 'เจ้าหน้าที่');
+UPDATE users SET role = 'แอดมินแพทย์' WHERE role IN ('แอดมิน', 'Admin', 'admin');
 
 -- ถ้าเคยรัน schema เก่าที่มี plain password ให้อัปเดตเป็น bcrypt:
 -- UPDATE users SET password_hash = '$2b$10$b14My6yUItAL/vZZTonZA.GNqvWA13bQDa65QcJWo4cN66orSMoGu' WHERE username = 'talos blackagency';

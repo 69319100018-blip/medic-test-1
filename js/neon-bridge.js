@@ -583,13 +583,15 @@
     const list = document.getElementById('membersList');
     if (!list) return;
 
+    // ลำดับตำแหน่งตรงกับหน้าเว็บ MEDIC LIGHT CITY — รายชื่อแพทย์
     const ROLE_PRESETS = [
+      'แอดมินแพทย์',
       'ผู้อำนวยการแพทย์',
-      'รอง.ผู้อำนวยการ',
+      'รองผู้อำนวยการแพทย์',
+      'ส่วนกลาง',
+      'แพทย์ชำนาญการ',
       'แพทย์',
-      'พยาบาล',
-      'เจ้าหน้าที่',
-      'แพทย์ (รอปรับ role)'
+      'นักเรียนแพทย์'
     ];
 
     async function refresh() {
