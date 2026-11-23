@@ -966,67 +966,109 @@ function isPrivateIp(ip) {
   return false;
 }
 
-async function lookupIpGeo(ip) {
-  const clean = String(ip || '').replace(/^::ffff:/, '').trim();
-  if (!clean || isPrivateIp(clean)) {
-    return {
-      ip: clean || null,
-      private: true,
-      country: null,
-      region: null,
-      city: null,
-      lat: null,
-      lon: null,
-      isp: null,
-      org: null,
-      label: 'เครือข่ายภายใน / ไม่ระบุสาธารณะ'
-    };
-  }
-  const cached = geoCache.get(clean);
-  if (cached && Date.now() - cached.at < GEO_TTL_MS) return cached.data;
-
-  let data = {
-    ip: clean,
+function emptyGeo(clean, extra = {}) {
+  return {
+    ip: clean || null,
     private: false,
     country: null,
     region: null,
     city: null,
+    zip: null,
+    timezone: null,
     lat: null,
     lon: null,
     isp: null,
     org: null,
-    label: 'ไม่พบตำแหน่ง'
+    as: null,
+    sources: [],
+    label: 'ไม่พบตำแหน่ง',
+    ...extra
   };
+}
+
+async function fetchJsonTimeout(url, ms = 4500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const url = `http://ip-api.com/json/${encodeURIComponent(clean)}?fields=status,message,country,regionName,city,lat,lon,isp,org,query`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
     const resp = await fetch(url, { signal: ctrl.signal });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  } finally {
     clearTimeout(t);
-    if (resp.ok) {
-      const j = await resp.json();
-      if (j.status === 'success') {
-        const parts = [j.city, j.regionName, j.country].filter(Boolean);
-        data = {
-          ip: j.query || clean,
-          private: false,
-          country: j.country || null,
-          region: j.regionName || null,
-          city: j.city || null,
-          lat: typeof j.lat === 'number' ? j.lat : null,
-          lon: typeof j.lon === 'number' ? j.lon : null,
-          isp: j.isp || null,
-          org: j.org || null,
-          label: parts.length ? parts.join(', ') : (j.country || 'ไม่ระบุ')
-        };
-      } else {
-        data.label = j.message || 'lookup ล้มเหลว';
-      }
-    }
-  } catch (_e) {
-    data.label = 'lookup ไม่สำเร็จ';
   }
-  geoCache.set(clean, { data, at: Date.now() });
+}
+
+/** รวมหลายแหล่งเพื่อตำแหน่งละเอียดที่สุดที่ทำได้จาก IP สาธารณะ */
+async function lookupIpGeo(ip, { precise = false } = {}) {
+  const clean = String(ip || '').replace(/^::ffff:/, '').trim();
+  if (!clean || isPrivateIp(clean)) {
+    return emptyGeo(clean, {
+      private: true,
+      label: 'เครือข่ายภายใน / ไม่ระบุสาธารณะ'
+    });
+  }
+
+  const cacheKey = precise ? `p:${clean}` : clean;
+  const cached = geoCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < GEO_TTL_MS) return cached.data;
+
+  const data = emptyGeo(clean);
+  const sources = [];
+
+  // แหล่ง 1: ip-api.com (รายละเอียดครบ)
+  const j1 = await fetchJsonTimeout(
+    `http://ip-api.com/json/${encodeURIComponent(clean)}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,query`
+  );
+  if (j1 && j1.status === 'success') {
+    data.ip = j1.query || clean;
+    data.country = j1.country || data.country;
+    data.region = j1.regionName || data.region;
+    data.city = j1.city || data.city;
+    data.zip = j1.zip || data.zip;
+    data.timezone = j1.timezone || data.timezone;
+    if (typeof j1.lat === 'number') data.lat = j1.lat;
+    if (typeof j1.lon === 'number') data.lon = j1.lon;
+    data.isp = j1.isp || data.isp;
+    data.org = j1.org || data.org;
+    data.as = j1.as || data.as;
+    sources.push('ip-api');
+  }
+
+  // แหล่ง 2: ipwho.is (HTTPS) — ยืนยัน/เติมช่องว่าง
+  if (precise || !data.city || data.lat == null) {
+    const j2 = await fetchJsonTimeout(`https://ipwho.is/${encodeURIComponent(clean)}`);
+    if (j2 && j2.success !== false && (j2.ip || j2.latitude != null)) {
+      data.ip = j2.ip || data.ip;
+      data.country = data.country || j2.country || null;
+      data.region = data.region || j2.region || null;
+      data.city = data.city || j2.city || null;
+      data.zip = data.zip || j2.postal || null;
+      data.timezone = data.timezone || j2.timezone?.id || j2.timezone || null;
+      if (data.lat == null && typeof j2.latitude === 'number') data.lat = j2.latitude;
+      if (data.lon == null && typeof j2.longitude === 'number') data.lon = j2.longitude;
+      // ถ้า precise: เฉลี่ยพิกัดถ้าทั้งสองแหล่งมีค่าใกล้กัน
+      if (precise && typeof j2.latitude === 'number' && typeof data.lat === 'number') {
+        const dLat = Math.abs(j2.latitude - data.lat);
+        const dLon = Math.abs((j2.longitude || 0) - (data.lon || 0));
+        if (dLat < 1 && dLon < 1) {
+          data.lat = (data.lat + j2.latitude) / 2;
+          data.lon = ((data.lon || 0) + (j2.longitude || 0)) / 2;
+        }
+      }
+      data.isp = data.isp || j2.connection?.isp || j2.isp || null;
+      data.org = data.org || j2.connection?.org || j2.org || null;
+      sources.push('ipwho');
+    }
+  }
+
+  const parts = [data.city, data.region, data.country].filter(Boolean);
+  data.label = parts.length ? parts.join(', ') : (data.country || (sources.length ? 'ไม่ระบุเมือง' : 'lookup ไม่สำเร็จ'));
+  data.sources = sources;
+  data.accuracyNote = 'ตำแหน่งจาก IP สาธารณะ — โดยทั่วไปละเอียดระดับเมือง/ย่าน ไม่ใช่พิกัดบ้าน';
+
+  geoCache.set(cacheKey, { data, at: Date.now() });
   return data;
 }
 
@@ -1051,11 +1093,58 @@ app.get('/api/security-intel', authRequired, async (req, res) => {
         geoMap[ip] = results[idx];
       });
     }
+    // รายการ IP ให้เลือกใน UI
+    const ipOptions = [];
+    const seen = new Set();
+    for (const r of rows) {
+      if (!r.ipAddress || seen.has(r.ipAddress)) continue;
+      seen.add(r.ipAddress);
+      ipOptions.push({
+        ip: r.ipAddress,
+        username: r.username,
+        lastSeenAt: r.lastSeenAt || r.createdAt,
+        geo: geoMap[r.ipAddress] || null
+      });
+    }
     const items = rows.map((r) => ({
       ...r,
       geo: r.ipAddress ? (geoMap[r.ipAddress] || null) : null
     }));
-    res.json({ items, uniqueIpCount: uniqueIps.length, generatedAt: new Date().toISOString() });
+    res.json({
+      items,
+      ipOptions,
+      uniqueIpCount: uniqueIps.length,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+/** ถอดตำแหน่ง IP เดี่ยวแบบละเอียด (เลือก IP ใครก็ได้) */
+app.post('/api/security-geo', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const raw = String(req.body?.ip || '').trim();
+    if (!raw) return res.status(400).json({ error: 'กรุณาระบุ IP' });
+    // อนุญาต IPv4 / IPv6 เบื้องต้น
+    if (!/^[0-9a-fA-F:.]+$/.test(raw) || raw.length > 45) {
+      return res.status(400).json({ error: 'รูปแบบ IP ไม่ถูกต้อง' });
+    }
+    const geo = await lookupIpGeo(raw, { precise: true });
+    // หา username ที่เคยใช้ IP นี้ (ถ้ามี)
+    let users = [];
+    try {
+      const rows = await sql`
+        SELECT DISTINCT username FROM device_sessions
+        WHERE ip_address = ${raw}
+        ORDER BY username
+        LIMIT 20
+      `;
+      users = rows.map((r) => r.username).filter(Boolean);
+    } catch (_e) { /* ignore */ }
+    res.json({ ok: true, geo, users, lookedUpAt: new Date().toISOString() });
   } catch (err) {
     safeError(res, err);
   }

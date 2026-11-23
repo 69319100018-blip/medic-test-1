@@ -368,19 +368,37 @@
                 <div id="membersList" class="stock-list"></div>
             </section>
 
-            <!-- เมนูลับ: ถอดตำแหน่งจาก IP (เฉพาะแอดมิน + ปลดล็อก) -->
+            <!-- เมนูลับ: ถอดตำแหน่งจาก IP (เฉพาะแอดมิน + กด Numpad1 x3) -->
             <section class="panel panel-status hidden" id="intelSection">
                 <div class="panel-header">
                     <div>
-                        <p class="label">เมนูลับ</p>
-                        <h2>Intel — ตำแหน่งจาก IP</h2>
+                        <p class="label">เมนูลับ · คีย์ลัด Num1 × 3</p>
+                        <h2>Intel — ถอดตำแหน่งจาก IP</h2>
                     </div>
-                    <button id="btnRefreshIntel" class="btn btn-secondary btn-small" type="button">รีเฟรช</button>
+                    <button id="btnRefreshIntel" class="btn btn-secondary btn-small" type="button">รีเฟรชรายการ</button>
                 </div>
                 <p class="help-text" style="margin-bottom:12px;">
-                    ดึง IP จากเซสชันที่บันทึกไว้ แล้วถอดเมือง / จังหวัด / ประเทศ / ISP (ระดับเมืองโดยประมาณ ไม่ใช่พิกัดบ้าน)
+                    เลือก IP ของสมาชิกจากรายการ หรือพิมพ์ IP เอง แล้วให้ระบบคำนวณตำแหน่งจากหลายแหล่ง (ละเอียดระดับเมือง/ย่าน)
                 </p>
+
+                <div class="fund-card" style="margin-bottom:16px;">
+                    <h3>เลือก IP เพื่อถอดตำแหน่ง</h3>
+                    <label>IP จากเซสชันสมาชิก
+                        <select id="intelIpSelect">
+                            <option value="">— เลือกรายชื่อ / IP —</option>
+                        </select>
+                    </label>
+                    <label>หรือพิมพ์ IP เอง
+                        <input id="intelIpInput" type="text" placeholder="เช่น 1.2.3.4" autocomplete="off">
+                    </label>
+                    <div class="fund-actions">
+                        <button id="btnIntelLookup" class="btn btn-primary" type="button">คำนวณตำแหน่ง</button>
+                    </div>
+                    <div id="intelLookupResult" class="stock-list" style="margin-top:12px;"></div>
+                </div>
+
                 <div id="intelSummary" class="date-pill" style="margin-bottom:12px;">—</div>
+                <h3 class="stock-list-title">เซสชันล่าสุด + ตำแหน่งคร่าวๆ</h3>
                 <div id="intelList" class="stock-list"></div>
             </section>
 

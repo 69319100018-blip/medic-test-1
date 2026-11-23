@@ -1173,16 +1173,172 @@ function renderProfile() {
     if (!profile) return;
     document.getElementById('profileName').textContent = profile.name;
     document.getElementById('profileRole').textContent = profile.role;
-    document.getElementById('userAvatar').src = profile.avatar || 'assets/images/IMG_4436.png';
-    document.getElementById('userAvatar').alt = `${profile.name} avatar`;
+    const avatarSrc = profile.avatar || 'assets/images/IMG_4433.jpg';
+    const userAvatar = document.getElementById('userAvatar');
+    if (userAvatar) {
+        userAvatar.src = avatarSrc;
+        userAvatar.alt = `${profile.name} avatar`;
+    }
+    const brandAvatar = document.getElementById('brandAvatar');
+    if (brandAvatar) brandAvatar.src = avatarSrc;
     const statusLabel = document.getElementById('userStatus');
     const currentCheckIn = getOpenCheckIn(currentUser);
-    statusLabel.textContent = currentCheckIn ? 'อยู่ในเวร' : 'ยังไม่เข้าเวร';
-    statusLabel.style.color = currentCheckIn ? '#16a34a' : '';
+    if (statusLabel) {
+        statusLabel.textContent = currentCheckIn ? 'อยู่ในเวร' : 'ยังไม่เข้าเวร';
+        statusLabel.style.color = currentCheckIn ? '#16a34a' : '';
+    }
     const statusDot = document.getElementById('avatarStatusDot');
     if (statusDot) {
         statusDot.classList.toggle('on-duty', !!currentCheckIn);
     }
+    highlightActiveAvatarPreset(avatarSrc);
+}
+
+const AVATAR_PRESETS = [
+    'assets/images/talos.jpg',
+    'assets/images/IMG_4433.jpg',
+    'assets/images/123.jpg',
+    'assets/images/bg-fivem.png'
+];
+
+function highlightActiveAvatarPreset(currentSrc) {
+    const grid = document.getElementById('avatarPresetGrid');
+    if (!grid) return;
+    grid.querySelectorAll('.avatar-preset-item').forEach((img) => {
+        const src = img.getAttribute('data-src') || img.getAttribute('src');
+        img.classList.toggle('is-active', src === currentSrc);
+    });
+}
+
+function openAvatarPicker() {
+    const panel = document.getElementById('avatarPickerPanel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    const grid = document.getElementById('avatarPresetGrid');
+    if (grid && !grid.dataset.ready) {
+        grid.dataset.ready = '1';
+        grid.innerHTML = AVATAR_PRESETS.map((src) =>
+            `<img class="avatar-preset-item" src="${src}" data-src="${src}" alt="preset" title="เลือกรูปนี้">`
+        ).join('');
+        grid.querySelectorAll('.avatar-preset-item').forEach((img) => {
+            img.addEventListener('click', () => saveUserAvatar(img.getAttribute('data-src')));
+        });
+    }
+    highlightActiveAvatarPreset(userProfiles[currentUser]?.avatar);
+}
+
+function closeAvatarPicker() {
+    document.getElementById('avatarPickerPanel')?.classList.add('hidden');
+}
+
+function resizeImageToDataUrl(file, maxSize = 320, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        if (!file || !file.type.startsWith('image/')) {
+            reject(new Error('กรุณาเลือกไฟล์รูปภาพ'));
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            reject(new Error('ไฟล์ใหญ่เกิน 8MB'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('โหลดรูปไม่สำเร็จ'));
+            img.onload = () => {
+                let { width, height } = img;
+                const scale = Math.min(1, maxSize / Math.max(width, height));
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                let dataUrl = canvas.toDataURL('image/jpeg', quality);
+                // ถ้ายังใหญ่ ลดคุณภาพ
+                if (dataUrl.length > 500000) {
+                    dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+                }
+                resolve(dataUrl);
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function saveUserAvatar(avatar) {
+    if (!currentUser || !avatar) return;
+    try {
+        if (typeof apiUpdateAvatar === 'function' && sessionStorage.getItem('medicToken')) {
+            const res = await apiUpdateAvatar(avatar);
+            const u = res?.user;
+            if (u && userProfiles[currentUser]) {
+                userProfiles[currentUser].avatar = u.avatar || avatar;
+            } else if (userProfiles[currentUser]) {
+                userProfiles[currentUser].avatar = avatar;
+            }
+            try {
+                const p = JSON.parse(sessionStorage.getItem('medicProfile') || '{}');
+                p.avatar = userProfiles[currentUser].avatar;
+                sessionStorage.setItem('medicProfile', JSON.stringify(p));
+            } catch (_e) { /* ignore */ }
+        } else {
+            // โหมด localStorage
+            if (userProfiles[currentUser]) userProfiles[currentUser].avatar = avatar;
+            try {
+                localStorage.setItem('medicAvatar_' + currentUser, avatar);
+            } catch (_e) {
+                showAlert('บันทึกไม่สำเร็จ', 'ที่เก็บในเครื่องเต็มหรือไม่รองรับรูปขนาดนี้', 'warning');
+                return;
+            }
+        }
+        renderProfile();
+        closeAvatarPicker();
+        showAlert('อัปเดตรูปโปรไฟล์แล้ว', 'บันทึกเรียบร้อย', 'success');
+    } catch (err) {
+        showAlert('อัปเดตรูปไม่สำเร็จ', err.message || 'ลองใหม่อีกครั้ง', 'error');
+    }
+}
+
+async function handleAvatarFileChange(event) {
+    const file = event.target?.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+        showAlert('กำลังประมวลผลรูป...', 'ย่อขนาดให้อัตโนมัติ', 'info');
+        const dataUrl = await resizeImageToDataUrl(file);
+        await saveUserAvatar(dataUrl);
+    } catch (err) {
+        showAlert('อัปโหลดไม่สำเร็จ', err.message || 'ลองใหม่', 'error');
+    }
+}
+
+function setupAvatarPicker() {
+    if (window.__avatarPickerBound) return;
+    window.__avatarPickerBound = true;
+    document.getElementById('btnEditAvatar')?.addEventListener('click', openAvatarPicker);
+    document.getElementById('btnChangeAvatar')?.addEventListener('click', openAvatarPicker);
+    document.getElementById('btnCloseAvatarPicker')?.addEventListener('click', closeAvatarPicker);
+    document.getElementById('avatarFileInput')?.addEventListener('change', handleAvatarFileChange);
+    document.getElementById('btnResetAvatar')?.addEventListener('click', () => {
+        const fallback = AVATAR_PRESETS[0] || 'assets/images/IMG_4433.jpg';
+        saveUserAvatar(fallback);
+    });
+    // โหลด avatar จาก local ถ้าไม่มีใน profile
+    try {
+        const localAv = localStorage.getItem('medicAvatar_' + currentUser);
+        if (localAv && userProfiles[currentUser] && !String(userProfiles[currentUser].avatar || '').startsWith('data:')) {
+            if (!userProfiles[currentUser].avatar || userProfiles[currentUser].avatar.includes('assets/')) {
+                // ไม่ทับถ้ามี path จากเซิร์ฟเวอร์อยู่แล้ว — ใช้ local เฉพาะเมื่อเคยอัปโหลด
+            }
+        }
+        if (localAv && userProfiles[currentUser] && (!userProfiles[currentUser].avatar || sessionStorage.getItem('medicToken') === null)) {
+            userProfiles[currentUser].avatar = localAv;
+        }
+    } catch (_e) { /* ignore */ }
 }
 
 function renderLog() {
@@ -1498,6 +1654,11 @@ async function initDashboard() {
     document.getElementById('fundAdminCard')?.classList.toggle('hidden', !isAdmin(currentUser));
     document.getElementById('stockAddFormWrap')?.classList.toggle('hidden', !canManageStock(currentUser));
     document.getElementById('doctorsAddFormWrap')?.classList.add('hidden');
+
+    // ผูกคีย์ลัดเมนูลับ Intel (Num1 × 3)
+    if (typeof setupIntelUnlock === 'function') {
+        try { setupIntelUnlock(); } catch (_e) { /* ignore */ }
+    }
 
     // โหมด localStorage — ไม่ต้อง polling จากเซิร์ฟเวอร์
 }

@@ -193,6 +193,11 @@ async function apiLoadSecurityIntel() {
   return api('/security-intel');
 }
 
+/** ถอดตำแหน่ง IP เดี่ยวแบบละเอียด */
+async function apiLookupIpGeo(ip) {
+  return api('/security-geo', { method: 'POST', body: { ip } });
+}
+
 async function apiCreateBan(payload) {
   return api('/security-ban', { method: 'POST', body: payload });
 }
