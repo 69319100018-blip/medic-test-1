@@ -126,3 +126,50 @@ ON CONFLICT (username) DO NOTHING;
 -- UPDATE users SET password_hash = '$2b$10$b14My6yUItAL/vZZTonZA.GNqvWA13bQDa65QcJWo4cN66orSMoGu' WHERE username = 'talos blackagency';
 -- UPDATE users SET password_hash = '$2b$10$NN3DqBFZuViWUDuG8UXh6uKn.xPPqo6ke089NVOBLhhWUTG3Wc9rO' WHERE username = 'noelle blackagency';
 -- UPDATE users SET password_hash = '$2b$10$h/UOy9QcG/qn29OZD0/gEOWRqleDGEkBGX9U2iXzYbxqwLTKvo7Se' WHERE username = 'jane doe';
+
+-- ============================================================
+-- Security: เก็บ fingerprint / IP และรายการบล็อก
+-- (ดูได้เฉพาะแอดมินผ่านหน้าเว็บ / ฐานข้อมูล)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS device_sessions (
+    id              BIGSERIAL PRIMARY KEY,
+    username        TEXT,
+    fingerprint     TEXT NOT NULL,
+    ip_address      TEXT,
+    user_agent      TEXT,
+    screen          TEXT,
+    platform        TEXT,
+    language        TEXT,
+    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_sessions_fp ON device_sessions (fingerprint);
+CREATE INDEX IF NOT EXISTS idx_device_sessions_ip ON device_sessions (ip_address);
+CREATE INDEX IF NOT EXISTS idx_device_sessions_user ON device_sessions (username);
+
+CREATE TABLE IF NOT EXISTS security_bans (
+    id              BIGSERIAL PRIMARY KEY,
+    fingerprint     TEXT,
+    ip_address      TEXT,
+    username        TEXT,
+    reason          TEXT,
+    banned_by       TEXT,
+    active          BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_bans_active ON security_bans (active);
+CREATE INDEX IF NOT EXISTS idx_security_bans_fp ON security_bans (fingerprint) WHERE active = true;
+CREATE INDEX IF NOT EXISTS idx_security_bans_ip ON security_bans (ip_address) WHERE active = true;
+
+CREATE TABLE IF NOT EXISTS security_events (
+    id              BIGSERIAL PRIMARY KEY,
+    event_type      TEXT NOT NULL,
+    username        TEXT,
+    fingerprint     TEXT,
+    ip_address      TEXT,
+    detail          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

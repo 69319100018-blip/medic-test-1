@@ -29,6 +29,23 @@
         if (typeof userProfiles !== 'undefined') {
           userProfiles[result.username] = result.profile;
         }
+        try {
+          const fingerprint = typeof getDeviceFingerprint === 'function' ? getDeviceFingerprint() : (sessionStorage.getItem('medicFp') || '');
+          sessionStorage.setItem('medicFp', fingerprint);
+          if (typeof apiDeviceReport === 'function') {
+            await apiDeviceReport({
+              fingerprint,
+              userAgent: navigator.userAgent,
+              screen: String(screen.width) + 'x' + String(screen.height),
+              platform: navigator.platform || '',
+              language: navigator.language || ''
+            });
+          }
+        } catch (secErr) {
+          if (secErr && /ระงับ|banned|บล็อก/i.test(String(secErr.message || ''))) {
+            throw secErr;
+          }
+        }
         window.location.href = 'dashboard.html';
       } catch (err) {
         if (window.Swal) Swal.fire('เข้าสู่ระบบไม่สำเร็จ', err.message || 'ลองใหม่', 'error');
@@ -400,6 +417,20 @@
             if (typeof renderStock === 'function') renderStock();
             if (typeof renderVehicles === 'function') renderVehicles();
             if (typeof renderDoctors === 'function') renderDoctors();
+            // ---- Admin full access UI ----
+            try {
+              if (typeof isAdmin === 'function' && isAdmin(currentUser)) {
+                document.getElementById('fundAdminCard')?.classList.remove('hidden');
+                document.getElementById('stockAddFormWrap')?.classList.remove('hidden');
+                document.getElementById('doctorsAddFormWrap')?.classList.remove('hidden');
+                document.getElementById('navSecurity')?.classList.remove('hidden');
+                document.getElementById('vehicleAdminWrap')?.classList.remove('hidden');
+              } else if (typeof canViewMonitoring === 'function' && canViewMonitoring(currentUser)) {
+                document.getElementById('vehicleAdminWrap')?.classList.remove('hidden');
+              }
+              if (typeof enhanceVehicleAdminFilter === 'function') enhanceVehicleAdminFilter();
+              if (typeof setupSecurityAdmin === 'function') setupSecurityAdmin();
+            } catch (e) { console.warn(e); }
           });
         }
       }, 100);
@@ -407,4 +438,138 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
     else boot();
   }
+
+  window.enhanceVehicleAdminFilter = function () {
+    const select = document.getElementById('vehicleOwnerFilter');
+    const allList = document.getElementById('vehicleAllList');
+    if (!select || !allList) return;
+    const canSee = (typeof isAdmin === 'function' && isAdmin(currentUser)) ||
+      (typeof canViewMonitoring === 'function' && canViewMonitoring(currentUser));
+    if (!canSee) return;
+    const usersMap = (typeof userProfiles !== 'undefined') ? userProfiles : {};
+    const owners = new Set((vehicles || []).map((v) => v.username).filter(Boolean));
+    const currentVal = select.value || '__all__';
+    select.innerHTML = '<option value="__all__">ทั้งหมด</option>';
+    owners.forEach((u) => {
+      const opt = document.createElement('option');
+      opt.value = u;
+      opt.textContent = (usersMap[u]?.name || u);
+      select.appendChild(opt);
+    });
+    if (owners.has(currentVal) || currentVal === '__all__') select.value = currentVal;
+
+    const paint = () => {
+      const filter = select.value;
+      let list = vehicles || [];
+      if (filter && filter !== '__all__') list = list.filter((v) => v.username === filter);
+      if (!list.length) {
+        allList.innerHTML = '<div class="log-item"><strong>ไม่พบรถ</strong><span>ไม่มีทะเบียนในตัวกรองนี้</span></div>';
+        return;
+      }
+      if (typeof vehicleItemHtml === 'function') {
+        allList.innerHTML = list.map((v) => vehicleItemHtml(v, { showOwner: true })).join('');
+      } else {
+        allList.innerHTML = list.map((v) => `<div class="stock-item"><strong>${(v.plate || '').toUpperCase()}</strong> ${v.model || ''} • ${v.username || ''}</div>`).join('');
+      }
+      allList.querySelectorAll('.vehicle-remove').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (typeof confirmRemoveVehicle === 'function') confirmRemoveVehicle(btn.dataset.id);
+        });
+      });
+    };
+    select.onchange = paint;
+    const orig = window.renderVehicles;
+    if (typeof orig === 'function' && !orig.__enhanced) {
+      window.renderVehicles = function () {
+        orig();
+        paint();
+      };
+      window.renderVehicles.__enhanced = true;
+    }
+    paint();
+  };
+
+  window.setupSecurityAdmin = async function () {
+    if (typeof isAdmin !== 'function' || !isAdmin(currentUser)) return;
+    const banList = document.getElementById('banList');
+    const sessionList = document.getElementById('deviceSessionList');
+    const btn = document.getElementById('btnCreateBan');
+
+    async function refresh() {
+      try {
+        const bans = await apiLoadBans();
+        if (banList) {
+          const active = (bans || []).filter((b) => b.active);
+          banList.innerHTML = active.length ? active.map((b) => `
+            <div class="stock-item">
+              <div class="stock-item-head"><div>
+                <strong>${b.fingerprint || '-'} / ${b.ipAddress || '-'}</strong>
+                <span class="stock-meta">${b.username || ''} • ${b.reason || ''} • โดย ${b.bannedBy || ''}</span>
+              </div></div>
+              <div class="stock-item-actions">
+                <button class="btn btn-secondary btn-small ban-unban" data-id="${b.id}" type="button">ยกเลิกบล็อก</button>
+              </div>
+            </div>`).join('') : '<div class="log-item"><strong>ยังไม่มีรายการบล็อก</strong></div>';
+          banList.querySelectorAll('.ban-unban').forEach((el) => {
+            el.addEventListener('click', async () => {
+              await apiUnban(el.dataset.id);
+              refresh();
+              if (typeof showAlert === 'function') showAlert('ยกเลิกบล็อกแล้ว', '', 'success');
+            });
+          });
+        }
+        const sessions = await apiLoadDeviceSessions();
+        if (sessionList) {
+          sessionList.innerHTML = (sessions || []).length ? sessions.slice(0, 50).map((s) => `
+            <div class="stock-item">
+              <div class="stock-item-head"><div>
+                <strong>${s.username || '-'} • ${s.ipAddress || '-'}</strong>
+                <span class="stock-meta">${s.fingerprint || ''} • ${(s.userAgent || '').slice(0, 80)}</span>
+              </div></div>
+              <div class="stock-item-actions">
+                <button class="btn btn-danger btn-small ban-from-session" data-fp="${s.fingerprint || ''}" data-ip="${s.ipAddress || ''}" data-user="${s.username || ''}" type="button">บล็อก</button>
+              </div>
+            </div>`).join('') : '<div class="log-item"><strong>ยังไม่มีข้อมูลเซสชัน</strong></div>';
+          sessionList.querySelectorAll('.ban-from-session').forEach((el) => {
+            el.addEventListener('click', async () => {
+              await apiCreateBan({
+                fingerprint: el.dataset.fp || null,
+                ipAddress: el.dataset.ip || null,
+                username: el.dataset.user || null,
+                reason: 'บล็อกจากรายการเซสชัน'
+              });
+              refresh();
+              if (typeof showAlert === 'function') showAlert('บล็อกแล้ว', 'อุปกรณ์/IP นี้จะเข้าไม่ได้ทันที', 'success');
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('security admin', e);
+      }
+    }
+
+    if (btn) {
+      btn.onclick = async () => {
+        try {
+          await apiCreateBan({
+            fingerprint: document.getElementById('banFingerprintInput')?.value.trim() || null,
+            ipAddress: document.getElementById('banIpInput')?.value.trim() || null,
+            username: document.getElementById('banUsernameInput')?.value.trim() || null,
+            reason: document.getElementById('banReasonInput')?.value.trim() || 'ละเมิดกฎ'
+          });
+          ['banFingerprintInput', 'banIpInput', 'banUsernameInput', 'banReasonInput'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+          });
+          refresh();
+          if (typeof showAlert === 'function') showAlert('บล็อกสำเร็จ', 'จะถูกดีดออกทันทีเมื่อเข้าใช้งาน', 'success');
+        } catch (e) {
+          if (typeof showAlert === 'function') showAlert('บล็อกไม่สำเร็จ', e.message, 'error');
+        }
+      };
+    }
+    refresh();
+  };
+
+
 })();

@@ -108,6 +108,41 @@ function safeError(res, err, status = 500) {
   res.status(status).json({ error: status === 500 ? 'เกิดข้อผิดพลาดภายใน' : (err.message || 'error') });
 }
 
+
+function clientIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  if (xf) return String(xf).split(',')[0].trim();
+  return req.headers['x-real-ip'] || req.socket?.remoteAddress || '';
+}
+
+async function isBanned({ fingerprint, ip }) {
+  if (!sql) return null;
+  const rows = await sql`
+    SELECT id, reason, fingerprint, ip_address, username
+    FROM security_bans
+    WHERE active = true
+      AND (
+        (${fingerprint || null}::text IS NOT NULL AND fingerprint = ${fingerprint || null})
+        OR (${ip || null}::text IS NOT NULL AND ip_address = ${ip || null})
+      )
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function logSecurityEvent({ eventType, username, fingerprint, ip, detail }) {
+  if (!sql) return;
+  try {
+    await sql`
+      INSERT INTO security_events (event_type, username, fingerprint, ip_address, detail)
+      VALUES (${eventType}, ${username || null}, ${fingerprint || null}, ${ip || null}, ${detail || null})
+    `;
+  } catch (e) {
+    console.error('logSecurityEvent', e);
+  }
+}
+
 function needDb(res) {
   if (!sql) {
     res.status(503).json({ error: 'ยังไม่ได้ตั้งค่า DATABASE_URL' });
@@ -149,6 +184,14 @@ app.post('/api/login', loginLimiter, async (req, res) => {
       }
     }
     if (!ok) return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+
+    const fp = (req.body || {}).fingerprint || null;
+    const ipLogin = clientIp(req);
+    const banHit = await isBanned({ fingerprint: fp, ip: ipLogin });
+    if (banHit) {
+      await logSecurityEvent({ eventType: 'blocked_login', username: uname, fingerprint: fp, ip: ipLogin, detail: banHit.reason });
+      return res.status(403).json({ error: banHit.reason || 'บัญชีหรืออุปกรณ์นี้ถูกระงับการใช้งาน', banned: true });
+    }
 
     const profile = {
       name: u.name, role: u.role, avatar: u.avatar,
@@ -581,6 +624,164 @@ app.delete('/api/doctor-item', authRequired, async (req, res) => {
     safeError(res, err);
   }
 });
+
+
+// ---------- Security / device / ban ----------
+app.post('/api/security-check', async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    const { fingerprint } = req.body || {};
+    const ip = clientIp(req);
+    const ban = await isBanned({ fingerprint, ip });
+    if (ban) {
+      await logSecurityEvent({
+        eventType: 'blocked_access',
+        fingerprint,
+        ip,
+        detail: ban.reason || 'banned'
+      });
+      return res.status(403).json({
+        banned: true,
+        reason: ban.reason || 'บัญชีหรืออุปกรณ์นี้ถูกระงับการใช้งาน'
+      });
+    }
+    res.json({ banned: false, ip });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.post('/api/device-report', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    const { fingerprint, userAgent, screen, platform, language } = req.body || {};
+    if (!fingerprint) return res.status(400).json({ error: 'ไม่มี fingerprint' });
+    const ip = clientIp(req);
+    const ban = await isBanned({ fingerprint, ip });
+    if (ban) {
+      return res.status(403).json({ banned: true, reason: ban.reason || 'ถูกระงับ' });
+    }
+    await sql`
+      INSERT INTO device_sessions (username, fingerprint, ip_address, user_agent, screen, platform, language)
+      VALUES (${req.user.sub}, ${fingerprint}, ${ip}, ${userAgent || null}, ${screen || null}, ${platform || null}, ${language || null})
+    `;
+    await logSecurityEvent({
+      eventType: 'login_device',
+      username: req.user.sub,
+      fingerprint,
+      ip,
+      detail: userAgent || ''
+    });
+    res.json({ ok: true, ip });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.get('/api/security-bans', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const rows = await sql`
+      SELECT id, fingerprint, ip_address AS "ipAddress", username, reason,
+             banned_by AS "bannedBy", active, created_at AS "createdAt"
+      FROM security_bans
+      ORDER BY created_at DESC
+      LIMIT 200
+    `;
+    res.json(rows);
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.get('/api/security-sessions', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const rows = await sql`
+      SELECT id, username, fingerprint, ip_address AS "ipAddress", user_agent AS "userAgent",
+             screen, platform, language, last_seen_at AS "lastSeenAt", created_at AS "createdAt"
+      FROM device_sessions
+      ORDER BY created_at DESC
+      LIMIT 300
+    `;
+    res.json(rows);
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.post('/api/security-ban', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const { fingerprint, ipAddress, username, reason } = req.body || {};
+    if (!fingerprint && !ipAddress && !username) {
+      return res.status(400).json({ error: 'ระบุ fingerprint หรือ IP หรือ username' });
+    }
+    const rows = await sql`
+      INSERT INTO security_bans (fingerprint, ip_address, username, reason, banned_by, active)
+      VALUES (${fingerprint || null}, ${ipAddress || null}, ${username || null}, ${reason || 'ละเมิดกฎ'}, ${req.user.sub}, true)
+      RETURNING id
+    `;
+    await logSecurityEvent({
+      eventType: 'ban_created',
+      username: req.user.sub,
+      fingerprint,
+      ip: ipAddress,
+      detail: reason || ''
+    });
+    res.json({ ok: true, id: rows[0].id });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.post('/api/security-unban', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    if (!req.user.isAdmin) return res.status(403).json({ error: 'เฉพาะแอดมิน' });
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'ไม่มี id' });
+    await sql`UPDATE security_bans SET active = false WHERE id = ${id}`;
+    res.json({ ok: true });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
+app.post('/api/security-event', authRequired, async (req, res) => {
+  try {
+    if (!needDb(res)) return;
+    const { eventType, fingerprint, detail } = req.body || {};
+    const ip = clientIp(req);
+    await logSecurityEvent({
+      eventType: eventType || 'client_event',
+      username: req.user.sub,
+      fingerprint,
+      ip,
+      detail
+    });
+    // ถ้าเป็นเหตุร้ายแรง บล็อกทันที (admin เท่านั้นที่กำหนดจากฝั่ง server policy)
+    const severe = ['devtools_detected', 'tamper_detected', 'rule_violation'];
+    if (severe.includes(eventType) && fingerprint) {
+      // บันทึกเหตุการณ์ — การแบนจริงให้แอดมินกด หรือ auto-ban ถ้าต้องการ
+      // auto-ban เมื่อตรวจพบ devtools ซ้ำ
+      if (eventType === 'rule_violation') {
+        await sql`
+          INSERT INTO security_bans (fingerprint, ip_address, username, reason, banned_by, active)
+          VALUES (${fingerprint}, ${ip}, ${req.user.sub}, ${detail || 'ละเมิดกฎระบบ'}, 'system', true)
+        `;
+        return res.json({ ok: true, banned: true });
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    safeError(res, err);
+  }
+});
+
 
 app.get('/api/health', async (_req, res) => {
   try {

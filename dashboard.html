@@ -60,6 +60,9 @@
             <button class="nav-link" data-target="adminSection">
                 <i class="bi bi-shield-check"></i> ตรวจสอบ
             </button>
+            <button class="nav-link hidden" data-target="securitySection" id="navSecurity">
+                <i class="bi bi-shield-lock"></i> ความปลอดภัย
+            </button>
         </nav>
 
         <main class="dashboard-grid">
@@ -281,7 +284,13 @@
                     </div>
                 </div>
                 <div class="stock-list-wrap hidden" id="vehicleAdminWrap">
-                    <h3 class="stock-list-title">🔍 ทะเบียนรถของแพทย์ทุกคน (สำหรับแอดมิน/ผอ.)</h3>
+                    <h3 class="stock-list-title">🔍 ทะเบียนรถบุคลากร (แอดมิน/ผอ.)</h3>
+                    <div class="history-filter" style="margin-bottom:12px;">
+                        <label for="vehicleOwnerFilter">เลือกดูรถของ</label>
+                        <select id="vehicleOwnerFilter">
+                            <option value="__all__">ทั้งหมด</option>
+                        </select>
+                    </div>
                     <div id="vehicleAllList" class="stock-list"></div>
                 </div>
             </section>
@@ -331,6 +340,35 @@
                 </div>
                 <div id="logList" class="log-list"></div>
             </section>
+        
+            <section class="panel panel-status hidden" id="securitySection">
+                <div class="panel-header">
+                    <div>
+                        <p class="label">ความปลอดภัย</p>
+                        <h2>อุปกรณ์ / IP / รายการบล็อก</h2>
+                    </div>
+                </div>
+                <div class="fund-card">
+                    <h3>บล็อกอุปกรณ์หรือ IP</h3>
+                    <label>Fingerprint<input id="banFingerprintInput" type="text" placeholder="วาง fingerprint"></label>
+                    <label>IP Address<input id="banIpInput" type="text" placeholder="เช่น 1.2.3.4"></label>
+                    <label>Username (ถ้ามี)<input id="banUsernameInput" type="text" placeholder="ชื่อผู้ใช้"></label>
+                    <label>เหตุผล<input id="banReasonInput" type="text" placeholder="ละเมิดกฎ / ใช้ DevTools ฯลฯ"></label>
+                    <div class="fund-actions">
+                        <button id="btnCreateBan" class="btn btn-danger" type="button">บล็อกทันที</button>
+                    </div>
+                    <p class="help-text">เมื่อถูกบล็อก ระบบจะดีดออกจากเว็บทันทีเมื่อเข้าใช้งาน</p>
+                </div>
+                <div class="stock-list-wrap" style="margin-top:16px;">
+                    <h3 class="stock-list-title">รายการบล็อกที่ใช้งานอยู่</h3>
+                    <div id="banList" class="stock-list"></div>
+                </div>
+                <div class="stock-list-wrap" style="margin-top:16px;">
+                    <h3 class="stock-list-title">เซสชันอุปกรณ์ล่าสุด</h3>
+                    <div id="deviceSessionList" class="stock-list"></div>
+                </div>
+            </section>
+
         </main>
     </div>
 

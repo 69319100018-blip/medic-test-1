@@ -20,6 +20,29 @@ function setSession(username, profile, token) {
   sessionStorage.setItem(PROFILE_KEY, JSON.stringify(profile || {}));
 }
 
+
+function getDeviceFingerprint() {
+  try {
+    const parts = [
+      navigator.userAgent || '',
+      navigator.language || '',
+      navigator.platform || '',
+      String(screen.width) + 'x' + String(screen.height) + 'x' + String(screen.colorDepth || ''),
+      String(window.devicePixelRatio || 1),
+      Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    ];
+    const raw = parts.join('|');
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'fp_' + Math.abs(hash).toString(16) + '_' + (raw.length * 7).toString(16);
+  } catch {
+    return 'fp_unknown';
+  }
+}
+
 function clearSession() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
@@ -62,7 +85,9 @@ async function api(path, options = {}) {
 }
 
 async function apiLogin(username, password) {
-  const data = await api('/login', { method: 'POST', body: { username, password } });
+  const fingerprint = typeof getDeviceFingerprint === 'function' ? getDeviceFingerprint() : (sessionStorage.getItem('medicFp') || '');
+  if (fingerprint) sessionStorage.setItem('medicFp', fingerprint);
+  const data = await api('/login', { method: 'POST', body: { username, password, fingerprint } });
   if (data.token) {
     setSession(data.username, data.profile, data.token);
     sessionStorage.setItem('loggedInUser', data.username);
@@ -145,3 +170,33 @@ async function apiAddDoctor(d) {
 async function apiDeleteDoctor(id) {
   return api('/doctor-item', { method: 'DELETE', body: { id } });
 }
+
+// ---------- Security ----------
+async function apiSecurityCheck(fingerprint) {
+  return api('/security-check', { method: 'POST', body: { fingerprint } });
+}
+
+async function apiDeviceReport(payload) {
+  return api('/device-report', { method: 'POST', body: payload });
+}
+
+async function apiLoadBans() {
+  return api('/security-bans');
+}
+
+async function apiLoadDeviceSessions() {
+  return api('/security-sessions');
+}
+
+async function apiCreateBan(payload) {
+  return api('/security-ban', { method: 'POST', body: payload });
+}
+
+async function apiUnban(id) {
+  return api('/security-unban', { method: 'POST', body: { id } });
+}
+
+async function apiSecurityEvent(payload) {
+  return api('/security-event', { method: 'POST', body: payload });
+}
+
